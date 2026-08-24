@@ -7,14 +7,21 @@ name = "golf-expected-score"
 version = "0.1.0"
 description = "Golf handicap and expected-score calculations (World Handicap System)"
 requires-python = ">=3.11"
-# No runtime dependencies on purpose: this layer is plain Python.
-dependencies = []
+# The `golf` package itself imports none of these -- the math layer stays plain
+# Python. They are here for the `api` package, which wraps it in HTTP.
+#   fastapi  - the web framework: routing, validation, OpenAPI docs
+#   uvicorn  - the ASGI server that actually runs the app and listens on a port
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+# httpx backs FastAPI's TestClient, which calls the app in-process (no server).
+dev = ["pytest>=8.0", "httpx>=0.27"]
 
 [tool.setuptools.packages.find]
-include = ["golf*"]
+include = ["golf*", "api*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

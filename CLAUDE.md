@@ -56,7 +56,7 @@ understandable steps over large one-shot generations.
 1. Pure Python calculation functions (expected score, differential) + pytest
    unit tests against known-correct values. No web framework yet. **Done.**
 2. Wrap the functions in a FastAPI app with a couple of REST endpoints.
-   Verify via FastAPI's auto-generated /docs page.
+   Verify via FastAPI's auto-generated /docs page. **Done.**
 3. Minimal single-page React frontend: a form (handicap, slope, rating) that
    calls the API and displays the result.
 4. Add Postgres with SQLAlchemy as the ORM. Tables: `users`, `courses`, `tees`,
@@ -97,7 +97,8 @@ ROADMAP.md            product vision and feature tiers — the "why"
 backend/
   pyproject.toml      package metadata; `pip install -e ".[dev]"` to set up
   golf/handicap.py    all calculation logic (framework-free, no I/O)
-  tests/test_handicap.py
+  api/main.py         FastAPI routes; api/schemas.py holds the Pydantic models
+  tests/test_handicap.py, tests/test_api.py
 frontend/             (added in step 3)
 ```
 The `backend/` directory exists from step 1 so the frontend has an obvious home
@@ -105,7 +106,12 @@ later and nothing needs moving.
 
 ## Conventions
 - Keep the calculation logic backend-only and framework-free — it should be
-  importable and testable without spinning up FastAPI.
+  importable and testable without spinning up FastAPI. The dependency arrow
+  points one way: `api` imports `golf`, never the reverse.
+- **Validate at both altitudes.** Pydantic models reject bad input at the HTTP
+  boundary (a clean 422); `golf/` keeps its own `ValueError` guards for
+  non-HTTP callers. Import the bounds from `golf.handicap` rather than
+  retyping them, so the two can't drift.
 - **New analytics go in `backend/golf/` as pure functions over lists of round
   records**, with pytest tests written first against known-correct values. Same
   rule as `handicap.py`: no framework, no I/O, no database access. The stats
