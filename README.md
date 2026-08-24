@@ -4,12 +4,20 @@ Enter a handicap index plus a course's slope and rating, and see the expected
 score for that handicap on that tee — so a "bad" score on a hard course can be
 seen for what it actually is.
 
+The calculator is the starting point, not the goal — the USGA already has one of
+those. The aim is what only your *history* can tell you: a Handicap Index is the
+average of your best 8 of the last 20 rounds, so it measures your **potential**,
+not your typical score. This app is being built to show both, to estimate how
+you're playing *right now* rather than 20 rounds ago, and to find the courses
+that suit your game. See **[ROADMAP.md](ROADMAP.md)**.
+
 Currently at **step 1** of the build order in `CLAUDE.md`: the calculation core
 and its tests. No web framework, no database, no frontend yet.
 
 ## Layout
 
 ```
+ROADMAP.md              where this is going, and why
 backend/
   golf/handicap.py      all the math (framework-free, no I/O)
   tests/test_handicap.py
