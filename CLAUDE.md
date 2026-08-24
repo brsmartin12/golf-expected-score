@@ -48,6 +48,17 @@ understandable steps over large one-shot generations.
    from their various tee boxes (e.g. from a golf course database API or
    web scraping).
 
+## Project layout
+```
+backend/
+  pyproject.toml        package metadata; `pip install -e ".[dev]"` to set up
+  golf/handicap.py      all calculation logic (framework-free, no I/O)
+  tests/test_handicap.py
+frontend/               (added in step 3)
+```
+The `backend/` directory exists from step 1 so the frontend has an obvious home
+later and nothing needs moving.
+
 ## Conventions
 - Keep the calculation logic backend-only and framework-free — it should be
   importable and testable without spinning up FastAPI.

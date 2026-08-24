@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "golf-expected-score"
+version = "0.1.0"
+description = "Golf handicap and expected-score calculations (World Handicap System)"
+requires-python = ">=3.11"
+# No runtime dependencies on purpose: this layer is plain Python.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+include = ["golf*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
