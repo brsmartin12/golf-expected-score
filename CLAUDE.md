@@ -44,6 +44,9 @@ understandable steps over large one-shot generations.
    frontend to the deployed backend URL via an environment variable.
 6. (Stretch) Basic auth (e.g. Supabase Auth or Clerk) if/when other people
    will use it with their own data.
+7. (Future) Automatic integration to pull slope and rating values for courses
+   from their various tee boxes (e.g. from a golf course database API or
+   web scraping).
 
 ## Conventions
 - Keep the calculation logic backend-only and framework-free — it should be
