@@ -58,7 +58,7 @@ understandable steps over large one-shot generations.
 2. Wrap the functions in a FastAPI app with a couple of REST endpoints.
    Verify via FastAPI's auto-generated /docs page. **Done.**
 3. Minimal single-page React frontend: a form (handicap, slope, rating) that
-   calls the API and displays the result.
+   calls the API and displays the result. **Done.**
 4. Add Postgres with SQLAlchemy as the ORM. Tables: `users`, `courses`, `tees`,
    `rounds`, `handicap_snapshots` — see the schema in `ROADMAP.md`. Two things
    are much cheaper now than later:
@@ -99,7 +99,10 @@ backend/
   golf/handicap.py    all calculation logic (framework-free, no I/O)
   api/main.py         FastAPI routes; api/schemas.py holds the Pydantic models
   tests/test_handicap.py, tests/test_api.py
-frontend/             (added in step 3)
+frontend/             Vite + React single-page app
+  src/App.jsx         the form, its state, and the submit handler
+  src/api.js          the only module that talks to the backend
+  src/ResultCard.jsx  renders a result
 ```
 The `backend/` directory exists from step 1 so the frontend has an obvious home
 later and nothing needs moving.
