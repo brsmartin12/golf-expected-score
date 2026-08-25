@@ -85,12 +85,8 @@ understandable steps over large one-shot generations.
    and what gets replaced (the form, once courses and tees are pickable).
 4. Add Postgres with SQLAlchemy as the ORM. Tables: `users`, `courses`, `tees`,
    `rounds`, `handicap_snapshots` — see the schema in `ROADMAP.md`. Being taken
-   in pieces: **connection, sessions, models and API wiring done**
-   (`backend/db/`, `/health/db`, `docker-compose.yml`, `/courses`, `/rounds`);
-   Alembic is
-   deliberately not in yet — `python -m db.create_tables` is the stopgap, and
-   migrations must land before the step-5 backfill, since thirty hand-entered
-   rounds are data worth keeping. Two things
+   **Done** — connection, sessions, models, API wiring (`/courses`, `/rounds`)
+   and Alembic migrations. Two things
    are much cheaper now than later:
    - `tees` is its own table, not a column on `courses`. Slope and rating are
      per-tee.
@@ -143,6 +139,7 @@ backend/
   db/session.py       SQLAlchemy engine + session factory; reads DATABASE_URL
   db/models.py        the tables: users, courses, tees, rounds, snapshots
   db/config.py        where DATABASE_URL comes from; no side effects on import
+  migrations/         Alembic; `alembic upgrade head` builds the schema
   api/routers/        courses.py and rounds.py, mounted in main.py
   api/deps.py         get_current_user — the seam auth replaces at step 10
   tests/              handicap, api, db, models, routes_data
@@ -182,6 +179,11 @@ later and nothing needs moving.
   records**, with pytest tests written first against known-correct values. Same
   rule as `handicap.py`: no framework, no I/O, no database access. The stats
   layer is the part worth proving correct.
+- **Schema changes go through Alembic, never `create_all`.** `create_all` only
+  ever creates, so it silently does nothing to a table that already exists.
+  After changing a model, run `alembic revision --autogenerate -m "..."`, read
+  what it wrote, and commit it with the model change. `tests/test_migrations.py`
+  fails if the two ever disagree.
 - **Store raw inputs; derive everything else on read.** Differentials, course
   handicaps and potential scores are computed, never persisted as the source of
   truth — otherwise a formula fix leaves the database disagreeing with the code.
