@@ -15,6 +15,11 @@ differentials, so a round matching it is a good round, not a typical one. The
 code says `potential_score` everywhere for this reason — see the module
 docstring in `golf/handicap.py`.
 
+The *product name* is a separate matter and is still unchosen. "Golf Expected
+Score" survives as a placeholder in the `<h1>`, the FastAPI title and the repo
+name — deliberately, not as a missed rename. A title is not a claim about the
+math. Leave it until a real name exists.
+
 **But the calculator is not the product.** The USGA already ships that. The
 product is what you can only say once rounds accumulate: a Handicap Index is the
 average of your *best 8 of the last 20* differentials, which makes it a measure
