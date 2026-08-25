@@ -58,7 +58,11 @@ understandable steps over large one-shot generations.
 2. Wrap the functions in a FastAPI app with a couple of REST endpoints.
    Verify via FastAPI's auto-generated /docs page. **Done.**
 3. Minimal single-page React frontend: a form (handicap, slope, rating) that
-   calls the API and displays the result. **Done.**
+   calls the API and displays the result. **Done** — but this screen is
+   *scaffolding*, not the product: it is the calculator `ROADMAP.md` opens by
+   saying should not exist twice. Don't polish it. See Tier 0 in `ROADMAP.md`
+   for what survives from it (`api.js`, the env wiring, the to-par convention)
+   and what gets replaced (the form, once courses and tees are pickable).
 4. Add Postgres with SQLAlchemy as the ORM. Tables: `users`, `courses`, `tees`,
    `rounds`, `handicap_snapshots` — see the schema in `ROADMAP.md`. Two things
    are much cheaper now than later:
@@ -105,7 +109,7 @@ backend/
   golf/handicap.py    all calculation logic (framework-free, no I/O)
   api/main.py         FastAPI routes; api/schemas.py holds the Pydantic models
   tests/test_handicap.py, tests/test_api.py
-frontend/             Vite + React single-page app
+frontend/             Vite + React single-page app — scaffolding, see step 3
   src/App.jsx         the form, its state, and the submit handler
   src/api.js          the only module that talks to the backend
   src/ResultCard.jsx  renders a result
