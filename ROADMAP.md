@@ -54,7 +54,7 @@ That gap is where the whole product lives:
 | Audience | **Me + golf friends** | `user_id` in the schema from day one; auth moves earlier than originally planned |
 | Form factor | **Mobile first, desktop too** | Round entry happens on a phone; see below. Constrains layout and charts from Tier 1 on |
 | Naming | **"Potential", never "expected"** | The number is the best-8-of-20 score, i.e. a good round, not a typical one. `potential_score` / `strokes_vs_potential` / `to_potential` throughout. \"Typical\" is reserved for the median figure that arrives with stored rounds |
-| Display convention | **Golf's to-par orientation** | The gap to potential shows as `+5.0` over (worse) and `-4.0` under (better), because a minus sign already means "under par" to a golfer. `strokes_vs_potential` in the API is the opposite sign on purpose — it is the analysis primitive, where higher is better. Never show it raw |
+| Display convention | **Golf's to-par orientation, for every stroke number in the app** | A minus sign already means "under par" to a golfer, so negative is always the good direction and positive always the bad one — on the round card, the form table, the season table, and anything added later. `strokes_vs_potential` in the API is the opposite sign on purpose: it is an analysis primitive where higher is better, and it is never shown raw. If a new number cannot be expressed with negative-is-better, that is a signal it is the wrong number to put on a screen |
 
 ---
 
@@ -416,11 +416,20 @@ same piece of work, once there is more than one real user to put in them.
 The metric is a **change**, not a level. For each player:
 
 ```
-form_delta = mean(baseline differentials) - weighted mean(recent differentials)
+form_delta = weighted mean(recent differentials) - mean(baseline differentials)
 ```
 
-Positive means playing better than their own normal, in strokes. Rank on it,
-descending.
+**Negative means playing better than their own normal**, in strokes, because
+negative is the good direction everywhere in this app — see the display
+convention in the decisions table. A golfer reading `-2.4` sees two and a half
+strokes to the good without being taught anything.
+
+Rank ascending: most negative at the top.
+
+Note this is subtracted the opposite way round from `strokes_vs_potential`,
+which is an analysis primitive where higher is better and is never displayed.
+Form has no such second orientation — it exists only to be shown, so it is
+defined in the display convention once and never flipped.
 
 Three layers of normalisation fall out of that definition, which together are
 what "normalised to their handicap" actually means:
@@ -439,7 +448,8 @@ what "normalised to their handicap" actually means:
 Rank on the **stroke-denominated delta** because it is the one a golfer can read
 without explanation ("Sam is playing 2.1 strokes better than his normal"), and
 carry the standardised version alongside as the tie-break and as the "how
-surprising is this" figure.
+surprising is this" figure. The standardised version carries the same sign, so
+negative stays good there too.
 
 **It also happens to solve the sandbagging problem, for free.** Read the formula
 again: the Handicap Index does not appear in it. Both terms are the player's own
@@ -484,8 +494,9 @@ the screen wait for Tier 5.
 Two boards answering two different questions is worth having. The form table is
 "who is hot"; the season table is the standings.
 
-**What "level" was originally going to mean:** average strokes-vs-potential over
-a season. Positive means beating your handicap.
+**What "level" was originally going to mean:** average `strokes_vs_potential`
+over a season — the analysis primitive, where higher is better. (It would never
+have reached a screen in that orientation; see the display convention.)
 
 **That version does not measure what it claims.** An index is the mean of the
 best 8 of the last 20 differentials, so the gap between a player's average round
@@ -500,7 +511,8 @@ over 20,000 seasons per case:
 | 5.0                 | −4.64                     | 18.7%                         |
 | 7.0                 | −6.53                     | 18.4%                         |
 
-The average tracks σ almost exactly (−0.93σ across the range). So **a season
+The average `strokes_vs_potential` tracks σ almost exactly (−0.93σ across the
+range — negative because almost every round falls short of potential). So **a season
 table ranked on average strokes-vs-potential is a consistency ranking wearing a
 disguise** — the steadiest player wins, whether or not anyone is playing above
 their handicap. Calling that a "level" board mislabels it.
@@ -583,8 +595,9 @@ Count is more fun to say. Rank on the rate, print the count and the index change
 in the row, and require a minimum number of rounds before anyone is ranked.
 
 **Consistency is a stat, not a third board.** Given that average
-strokes-vs-potential is ≈ −0.93σ, a consistency board and an average-based level
-board would be the same board twice. Show σ on the player's own page with the
+`strokes_vs_potential` is ≈ −0.93σ — a fixed multiple of the player's own spread
+— a consistency board and an average-based level board would be the same board
+twice. Show σ on the player's own page with the
 Tier 3 work, not as a competing ranking.
 
 **Sequencing: ship form first.** It is the differentiated one, it needs no index,
@@ -607,9 +620,9 @@ top of it is a streak, not a verdict.
 ```
 FORM — last 8 rounds vs your own normal              this week
 
-1  Sam      +2.4  ●  playing better than normal        8 rounds
-2  Bri      +0.9  ○  within his normal range           6 rounds
-3  Dave     -1.6  ○  within his normal range          11 rounds
+1  Sam      -2.4  ●  playing better than normal        8 rounds
+2  Bri      -0.9  ○  within his normal range           6 rounds
+3  Dave     +1.6  ○  within his normal range          11 rounds
    Chris      --     needs 4 more rounds               6 rounds
 
 ● a real change   ○ too small to call yet
@@ -648,6 +661,10 @@ par is 19% — that is how often anyone beats their own handicap
 5. **Last place is not an insult.** Bottom of the form table means playing below
    your own usual standard this month, which happens to everyone. Word it that
    way. "Worst" never appears.
+6. **Negative is good, on every board.** `-2.4` on the form table and `-2.8` on
+   the season table both mean strokes to the good, exactly as a scorecard reads.
+   No board anywhere in the app may invert this, however natural "bigger number
+   wins" feels for a leaderboard.
 
 **Failure modes worth designing against:**
 

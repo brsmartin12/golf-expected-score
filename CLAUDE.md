@@ -124,7 +124,8 @@ understandable steps over large one-shot generations.
     own data. Then two group boards — a **form table** ranked on who is playing
     better than their *own* normal right now, and a **season table** ranked on
     the rate of rounds that beat your potential (the *rate*, not the average:
-    the average is ≈ −0.93σ, so ranking on it is ranking on consistency) — and a
+    average `strokes_vs_potential` is ≈ −0.93σ, a fixed multiple of the player's
+    own spread, so ranking on it is ranking on consistency) — and a
     net match calculator (the math for which is already in `handicap.py`). The form
     metric is a pure function over differentials and belongs in `backend/golf/`
     with step 7, since it shares the same recency-weighted machinery; only the
@@ -166,6 +167,13 @@ later and nothing needs moving.
   tests never fail because of rows left over from using the app. This is why
   `db/config.py` is separate and why `db/__init__.py` exports the connection
   objects lazily: the redirect has to happen before any Engine exists.
+- **Negative is good, in everything a golfer sees.** A minus sign already means
+  "under par", so every stroke-denominated number on a screen uses that
+  orientation — the round card, the form table, the season table, anything
+  added later. Analysis primitives may run the other way (`strokes_vs_potential`
+  is higher-is-better) but are never displayed raw; the API exposes a separate
+  display-oriented field instead, as `to_potential` does. See the display
+  convention in `ROADMAP.md`.
 - **Validate at both altitudes.** Pydantic models reject bad input at the HTTP
   boundary (a clean 422); `golf/` keeps its own `ValueError` guards for
   non-HTTP callers. Import the bounds from `golf.handicap` rather than
