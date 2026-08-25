@@ -47,6 +47,7 @@ That gap is where the whole product lives:
 | Data entered per round | **Score only** — date, course, tee, total | No hole-by-hole, no fairways/GIR/putts. Low friction is a feature |
 | Audience | **Me + golf friends** | `user_id` in the schema from day one; auth moves earlier than originally planned |
 | Form factor | **Mobile first, desktop too** | Round entry happens on a phone; see below. Constrains layout and charts from Tier 1 on |
+| Display convention | **Golf's to-par orientation** | The gap to expected shows as `+5.0` over (worse) and `-4.0` under (better), because a minus sign already means "under par" to a golfer. `strokes_vs_expected` in the API is the opposite sign on purpose — it is the analysis primitive, where higher is better. Never show it raw |
 
 ---
 
@@ -89,8 +90,40 @@ are `inputMode` on the numeric fields and an actual pass at 375px.
 
 ## Tier 0 — The calculator (build order steps 1–3)
 
-Unchanged from `CLAUDE.md`. Calculation core (done), FastAPI wrapper, minimal React
-form. Everything below assumes this exists.
+Calculation core, FastAPI wrapper, minimal React form. Everything below assumes
+this exists.
+
+**The screen this produces is scaffolding, not the product.** It is a handicap
+calculator — precisely the thing the top of this document says has no reason to
+exist a second time. Right now the app is strictly *worse* than the USGA's,
+because theirs also stores your rounds. That is expected at this tier, and it is
+not a sign the plan is wrong.
+
+So: do not invest in polishing this screen. It exists to prove the
+browser → HTTP → Python → rendered pixels round trip works, and to be the
+smallest possible surface on which to learn React.
+
+**What survives from Tier 0:**
+
+- `frontend/src/api.js` as the transport boundary. Every later call — post a
+  round, fetch history, get the form index — extends this module. The *pattern*
+  is the durable part, not the two functions currently in it.
+- The `VITE_API_URL` wiring, used verbatim when the frontend is deployed.
+- The CORS allowlist and the production build pipeline.
+- **The to-par display convention** (see the decisions table above). Every later
+  screen inherits it.
+- The `ResultCard` framing — the gap to expected as the headline, with the
+  expectation as supporting context. That presentation *is* the product thesis.
+- Working familiarity with React, which is the real deliverable of a learning
+  project.
+
+**What gets replaced:**
+
+- **The form.** Once `courses` and `tees` exist you pick a course from a list
+  instead of retyping slope and rating every round. Manual entry of a tee demotes
+  to an edge case for a course not yet added.
+- **The single-screen layout.** It becomes round entry, history, trends and
+  course fit — separate views with navigation between them.
 
 ## Tier 1 — History
 
