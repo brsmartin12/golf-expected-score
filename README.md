@@ -11,8 +11,8 @@ not your typical score. This app is being built to show both, to estimate how
 you're playing *right now* rather than 20 rounds ago, and to find the courses
 that suit your game. See **[ROADMAP.md](ROADMAP.md)**.
 
-Currently at **step 2** of the build order in `CLAUDE.md`: the calculation core
-and a FastAPI wrapper over it. No database and no frontend yet.
+Currently at **step 3** of the build order in `CLAUDE.md`: the calculation core,
+a FastAPI wrapper over it, and a React form that calls it. No database yet.
 
 ## Layout
 
@@ -23,7 +23,10 @@ backend/
   api/main.py           HTTP routes over that math
   api/schemas.py        request/response models
   tests/
-frontend/               (step 3)
+frontend/
+  src/App.jsx           the form and its state
+  src/api.js            the only module that talks to the backend
+  src/ResultCard.jsx    renders a result
 ```
 
 `api` imports `golf`; `golf` imports nothing from `api`. The math stays testable
@@ -73,6 +76,24 @@ curl -X POST http://127.0.0.1:8000/round \
 # {"score":88.0,"expected_score":83.0,"strokes_vs_expected":-5.0,
 #  "score_differential":14.3,"beat_expectation":false}
 ```
+
+## Running the frontend
+
+The frontend needs the API running, so start that first (above), then in a
+second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open <http://localhost:5173>. Enter a handicap index, slope and course rating to
+see what you're expected to shoot; add a score to grade a round you played.
+
+The backend URL defaults to `http://127.0.0.1:8000`. To point somewhere else,
+copy `.env.example` to `.env` and set `VITE_API_URL` — that's the hook step 9
+uses to aim the deployed frontend at the deployed backend.
 
 ## Using the math directly
 
