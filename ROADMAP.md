@@ -623,7 +623,7 @@ FORM — last 8 rounds vs your own normal              this week
 1  Sam      -2.4  ●  playing better than normal        8 rounds
 2  Bri      -0.9  ○  within his normal range           6 rounds
 3  Dave     +1.6  ○  within his normal range          11 rounds
-   Chris      --     needs 4 more rounds               6 rounds
+   Chris      --     needs 9 more rounds               6 rounds
 
 ● a real change   ○ too small to call yet
 Nobody here is a better golfer than anyone else. This is who is
@@ -643,7 +643,7 @@ SEASON 2026 — rounds that beat your own handicap
 par is 19% — that is how often anyone beats their own handicap
 ```
 
-**Five things the screen itself has to say**, not just this document:
+**Six things the screen itself has to say**, not just this document:
 
 1. **Neither board ranks who is the best golfer.** The handicap already does
    that and everyone knows it. Both are handicap-neutral by construction, so a
@@ -669,7 +669,7 @@ par is 19% — that is how often anyone beats their own handicap
 **Failure modes worth designing against:**
 
 - *A new member sees a locked row and feels shut out.* Frame it as a countdown —
-  "4 more rounds and you are on the board" — not as a rejection. They will join
+  "9 more rounds and you are on the board" — not as a rejection. They will join
   mid-season and this is their first impression of the whole feature.
 - *Somebody tops the form table on three lucky rounds.* Prevented by the minimum
   round count and the confidence marker, but only if both are enforced before
@@ -687,6 +687,42 @@ annoying.** "Sam just took the form lead" is genuinely fun once a week and
 intolerable daily. If it ships at all, it ships opt-in and rate-limited, and not
 before the boards themselves have been used for a season.
 
+### Still undecided
+
+The design above is settled. These parameters are not, and are recorded here so
+that a future session picks them deliberately rather than inventing them halfway
+through an implementation.
+
+- **Window sizes and recency weighting.** "Recent" is written as 5–10 rounds and
+  "baseline" as 20–30 throughout, without a decision, and the exponential decay
+  has no half-life attached. Pick these against the real backfilled history
+  rather than in the abstract — 30 rounds is enough to see what the estimator
+  does with them.
+- **Minimum rounds to be ranked.** Provisionally 15, on the reasoning that both
+  windows need populating. Worth revisiting once the estimator exists.
+- **When a season starts.** Calendar year is the obvious default; a northern
+  golf season running roughly April to October is arguably truer and makes the
+  winter reset feel natural rather than arbitrary. Undecided.
+- **Which index the season table counts against.** The official figure from
+  `handicap_snapshots` is the right answer where it exists, but most members
+  will not have entered one, and mixing official indexes for some players with
+  app-computed ones for others makes the ranking incomparable. Probably: use the
+  app's own best-8 figure for everyone, so the board is at least internally
+  consistent, and show the official index separately as information.
+- **How rounds with a null `index_at_time` feed the beat-rate.** The number has
+  to be derived per round from the rounds preceding it, which is the Tier 2 index
+  calculation applied at a historical point rather than to today. Straightforward
+  but not free, and the backfill makes it the common case rather than an edge one.
+- **Nine-hole rounds.** Stored, but the WHS rule for combining two nines into an
+  18-hole differential is not implemented. Until it is they should be excluded
+  from both boards, and the exclusion should be visible rather than silent.
+- **Multiple group membership.** The schema allows it. Whether the form figure is
+  global (the same number in every group) or scoped per group is a product
+  question — global is simpler and probably right, since form is about a player
+  and not about a group.
+- **Tie-breaks.** The form table has one: the standardised delta. The season
+  table has none, and percentages will tie often in a group of four.
+
 ### What the leaderboard has to get right
 
 These are not schema problems, which is exactly why they need writing down —
@@ -695,9 +731,10 @@ they will not surface on their own when the tables get built.
 **1. A ranking is meaningless for a member with thin history**, and the form
 table is hungrier than a level-based one because it needs *two* populated
 windows, not one. A new member cannot appear on it at all until they have a
-baseline as well as a recent run — realistically 15 rounds before the number
-means anything, and the table above shows why. Say *"needs 6 more rounds"* and
-leave them off the ranking until then. A member who tops the board on four
+baseline as well as a recent run — **15 rounds is the working minimum** before
+anyone is ranked at all, and the detectability table above shows why even that
+is generous. Count down to it explicitly and leave them off the ranking until
+they arrive. A member who tops the board on four
 rounds discredits the whole thing in week one.
 
 **2. Sandbagging, with a genuinely awkward twist.** Every handicap-based
