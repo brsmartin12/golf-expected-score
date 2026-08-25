@@ -280,7 +280,31 @@ existing math: framework-free, no I/O, provable.
   payoff on the roadmap, and it closes the exact "was that actually good?" loop that
   motivated the project.
 - **Typical vs. potential.** Both numbers, side by side with the actual score. The
-  headline screen of the whole app.
+  headline screen of the whole app, and **typical is the one that leads**.
+
+  Potential is beaten in only about one round in five — it is the best-8-of-20
+  score by construction. So a card headlined on the gap to potential delivers
+  bad news roughly four times out of five, however well the round was played.
+  Typical is a coin flip for everyone, always, and it answers the question
+  actually being asked in the car park: *was that a good round for me?*
+
+  So: headline the gap to typical, carry the gap to potential beside it as
+  context. That also gives the card four states rather than two — beat both,
+  beat typical only, beat neither, and the rare beat-potential-but-not-typical —
+  which is more interesting than a single verdict and is precisely what a
+  calculator with no history cannot show.
+
+  Note where this leaves the vocabulary. "Expected" was renamed to "potential"
+  because the word was wrong *for the index-based number*, which describes good
+  rounds rather than usual ones. The word itself was never wrong: **typical is
+  the expected score**, the middle of what you actually shoot. Use "typical" in
+  the UI, since it is concrete and cannot be misread — but the app's original
+  question turns out to have a correct answer after all, which is worth
+  remembering when the product name is finally chosen.
+
+  Two states to design, both drawn: with history, and before typical has settled,
+  where the card shows potential alone plus a countdown rather than inventing a
+  median from four rounds.
 - **Cross-course translation.** *"Your 85 at Pine Hills is an 81 at Riverside."* The
   differential already normalizes across courses; this just re-expresses it in the
   units golfers actually think in.
