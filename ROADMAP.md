@@ -46,8 +46,46 @@ That gap is where the whole product lives:
 | Headline differentiator | **Current-form index** | Tier 3 is the destination; earlier tiers exist to feed it |
 | Data entered per round | **Score only** — date, course, tee, total | No hole-by-hole, no fairways/GIR/putts. Low friction is a feature |
 | Audience | **Me + golf friends** | `user_id` in the schema from day one; auth moves earlier than originally planned |
+| Form factor | **Mobile first, desktop too** | Round entry happens on a phone; see below. Constrains layout and charts from Tier 1 on |
 
 ---
+
+## Mobile is the primary form factor
+
+This is not polish, and it is not only about small screens looking tidy.
+
+The score-only decision exists because **a round must stay a 15-second entry**.
+A 15-second entry happens in the parking lot straight after the round — on a
+phone. If logging a round means sitting down at a laptop later that evening,
+the friction that score-only entry was designed to eliminate comes straight back
+in through the other door, and the round simply never gets logged. Mobile is what
+makes the core scope decision actually work.
+
+Desktop still matters, but for a different job: reading trends, comparing
+courses, importing the spreadsheet. Entry is a phone activity; analysis is a
+lean-back activity. The app needs both, and they are not the same screen.
+
+What this means concretely:
+
+- **Design at 375px first**, then let the layout widen. Going the other way —
+  building a desktop screen and shrinking it — is how dense dashboards end up
+  unusable on the device they are most needed on.
+- **Inputs at a 16px minimum font size.** iOS Safari zooms the whole page when
+  focusing anything smaller, and it does not zoom back out cleanly.
+- **`inputMode="decimal"` on numeric fields**, so phones raise a number pad
+  instead of a full keyboard. Score entry is all digits.
+- **Touch targets at least 44px tall.** Comfortably bigger than a mouse needs.
+- **Tier 2–4 charts must be legible at 375px.** This is the real constraint of
+  this decision. Trend lines with error bars and per-course distributions are
+  easy to make dense; they have to survive a narrow screen or they will be
+  built twice.
+- **Later, and cheap: a PWA manifest** so the app can be added to the home
+  screen and open without browser chrome. Worth doing around Tier 5, once it is
+  something you would use every week.
+
+The step 3 frontend already has the viewport meta tag, a single-column layout,
+relative units and a max-width, so it is most of the way there. The known gaps
+are `inputMode` on the numeric fields and an actual pass at 375px.
 
 ## Tier 0 — The calculator (build order steps 1–3)
 
@@ -166,7 +204,43 @@ rather than merely fun.
 
 This is where "me + golf friends" pulls auth forward from its original step 6.
 
-- Auth (Supabase Auth or Clerk), groups, invitations.
+- **Google sign-in**, groups, invitations.
+
+  The OAuth flow itself is close to free — one library call
+  (`signInWithOAuth({ provider: "google" })`). Nobody should hand-roll OAuth.
+  The cost lives elsewhere, roughly in this order:
+
+  1. **Threading `user_id` through every query.** The largest piece by far, and
+     the one already pre-paid by putting `user_id` in the schema back at Tier 1
+     rather than retrofitting it here.
+  2. **Verifying the token on the FastAPI side.** A JWT signature check against
+     the provider's public keys, wrapped in one FastAPI dependency that turns a
+     request into a `user_id`. Around 30 lines. A new concept, but a small one.
+  3. **Google Cloud Console setup.** The OAuth consent screen, authorised
+     origins, redirect URIs. Genuinely fiddly, mostly clicking, and the error
+     messages when it is wrong are unhelpful. Budget an hour of irritation.
+  4. **Frontend session handling.** Storing the session, refreshing it, putting
+     the app behind a login, logging out. Probably introduces a router.
+  5. **Local development.** Signed-in has to work locally too, or there needs to
+     be a deliberate bypass.
+
+  Realistically **one to two focused sessions** once the schema exists — *if*
+  Postgres is already on Supabase, since Auth then comes in the same box and
+  shares the same user table. That is a real argument for choosing Supabase
+  over Railway for the database back at Tier 1.
+
+  **Sequencing: leave this at Tier 5, don't move it up.** Until then a single
+  hardcoded dev `user_id` is enough. Auth adds a token to every request and a
+  login wall to every local test, in exchange for nothing at all while you are
+  the only user.
+
+  One fork to decide here, not now: Supabase's Row Level Security enforces
+  tenancy in the database instead of in application code, which is the safer
+  pattern — but it expects requests to carry the user's JWT, which fits
+  Supabase's own client libraries better than SQLAlchemy connecting with a
+  service credential. With SQLAlchemy the practical answer is to enforce
+  `user_id` in application code and route every query through one place that
+  cannot forget.
 - **Leaderboard ranked by strokes-vs-expected, not raw score.** A 22-handicap can beat
   a 6-handicap on it. This is the app's entire thesis applied to a friend group, and
   it is a better game than counting strokes.
