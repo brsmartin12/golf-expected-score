@@ -484,6 +484,13 @@ players who are genuinely in form are visually distinct from the ones who are
 merely at the top this week. Never state a form change as fact when the interval
 covers zero.
 
+**Two separate jobs, easily conflated.** Shrinkage (`n / (n + k)`) makes the
+*ranking* fair when someone has few rounds; the confidence marker makes the app
+*honest* about whether a gap is real. Neither substitutes for the other — a
+shrunk delta can still be noise, and a significant delta still deserves shrinking
+if it rests on six rounds. Both are specified under "What the leaderboard has to
+get right".
+
 **Sequencing.** Everything above is a pure function over lists of differentials,
 so it belongs in `backend/golf/` with tests, alongside the Tier 3 current-form
 work — the two share the same recency-weighted machinery. Only the grouping and
@@ -592,7 +599,9 @@ current-form estimate, and it holds up for a friend group.
 
 **Count or rate?** Rate is fairer — it does not reward whoever played most.
 Count is more fun to say. Rank on the rate, print the count and the index change
-in the row, and require a minimum number of rounds before anyone is ranked.
+in the row, and shrink the rate toward the ~19% par line for anyone with few
+rounds rather than gating them out — see "What the leaderboard has to get
+right".
 
 **Consistency is a stat, not a third board.** Given that average
 `strokes_vs_potential` is ≈ −0.93σ — a fixed multiple of the player's own spread
