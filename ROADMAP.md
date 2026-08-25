@@ -58,6 +58,54 @@ That gap is where the whole product lives:
 
 ---
 
+## Two moments, not one app
+
+The app is opened at two distinct times, and they want different things.
+
+**Before the round — standing at the course.** What should I shoot here? Which
+tee should I play? Have I played well here before? What number today would move
+my index? Entirely read-only, and moderately time-pressured: this happens in the
+car park or on the first tee, not at a desk.
+
+**After the round — still in the car park.** Log it in fifteen seconds, and
+immediately find out whether it was any good. A write plus instant feedback, and
+the more time-pressured of the two. This is where the app gets abandoned if it is
+slow, which is the whole reason for the score-only scope decision.
+
+Why the pairing matters: post-round logging is a *chore*, and every golf app has
+one. Before-round is a reason to open the app when you are actually looking
+forward to something, and almost nothing does it well. The chore is what makes
+the data exist; the before-round moment is what makes the app worth keeping on a
+phone. Neither survives alone — so do not let the pre-round card get filed as a
+nice-to-have next to the logging screen.
+
+### What this implies
+
+- **Two entry points, not one form.** The Tier 0 screen conflates them: a single
+  form where a score is optional. That is the calculator framing, and it is one
+  of the things Tier 0 says gets replaced. The two moments deserve two screens
+  that happen to share maths.
+- **One "me, at this tee, today" call.** Both moments want the same bundle: the
+  tee's slope, rating and par; the current index; potential and typical here;
+  and the record at this course. Serving that in a single request keeps both
+  screens fast and stops the frontend orchestrating three round trips. Worth
+  knowing before the models land, since it shapes what they need to make cheap.
+- **Connectivity is a design constraint, not an afterthought.** Both moments
+  happen at a golf course, and plenty of courses have poor signal or none. A
+  post-round entry that fails in the car park does not merely annoy — it loses
+  the round, and the fifteen-second promise with it. Before Tier 1 ships, decide
+  whether entry queues locally and syncs later, or at minimum fails loudly with
+  everything still in the form and nothing silently dropped. Stale reads are
+  tolerable; a lost write is not.
+- **Sequencing.** The before-round card only gets interesting once rounds are
+  stored — "typical here" and "your record here" need history — so it lands in
+  Tier 2. Its *shape* is worth planning now, because it decides what the Tier 1
+  queries have to support.
+
+Today `POST /potential-score` answers the before-round question and `POST /round`
+answers the after-round one, so the API already splits along this seam. It is the
+UI and the data layer that still need to.
+
 ## Mobile is the primary form factor
 
 This is not polish, and it is not only about small screens looking tidy.

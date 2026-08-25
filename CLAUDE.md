@@ -61,6 +61,10 @@ understandable steps over large one-shot generations.
   friends*, so `user_id` exists from the first table, even before auth ships.
 - **Headline feature is the current-form index** (step 7 below). Earlier steps
   exist to make it possible.
+- **Two moments, not one app.** Before the round (what should I shoot here,
+  read-only) and after it (log in 15 seconds, get an instant verdict). Both
+  happen at the course on a phone, often on bad signal. Every screen and
+  endpoint should belong clearly to one of them — see `ROADMAP.md`.
 
 ## Build order (do not skip ahead)
 1. Pure Python calculation functions (potential score, differential) + pytest
