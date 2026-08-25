@@ -64,12 +64,18 @@ understandable steps over large one-shot generations.
    are much cheaper now than later:
    - `tees` is its own table, not a column on `courses`. Slope and rating are
      per-tee.
-   - Each round stores the handicap index *in effect when it was played*.
-     Recomputing history against today's index silently rewrites every past
-     round and destroys every trend.
-5. **CSV import** of the existing spreadsheet. Deliberately this early: with no
+   - Each round records the handicap index *in effect when it was played*, but
+     the column is nullable: it is derivable from the surrounding rounds (best 8
+     of the trailing 20), which is what makes hand-backfilling possible. Never
+     recompute history against *today's* index — that silently rewrites every
+     past round and destroys every trend.
+5. **Backfill the ~30 rounds of history**, deliberately this early: with no
    backfill the app has zero rounds and can say nothing interesting for a full
-   season. This is what makes steps 6–8 useful on day one.
+   season. This is what makes steps 6–8 useful on day one. The history is in
+   18Birdies, which has no export, so this is hand entry — meaning the work is
+   *quick-add entry UX*, not a CSV parser. Do import the existing spreadsheet,
+   but as seed data for `courses` and `tees`; it is a calculator, not a record
+   of scores.
 6. Score-only analytics, as pure functions in `backend/golf/` (test-first, same
    as step 1): full WHS index calculation (best 8 of 20, safeguards included),
    index projection ("shoot 84 and you go 12.4 → 12.1"), round percentile,

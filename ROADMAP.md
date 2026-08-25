@@ -97,20 +97,48 @@ form. Everything below assumes this exists.
 Nothing in Tiers 2–5 works without stored rounds. Two things here matter more than
 they look:
 
-**1. CSV import of the existing spreadsheet, in this tier — not "someday."**
+**1. Backfill the round history in this tier — not "someday."**
 
-Cold start is what kills an analytics app. With no import path, the app has zero
-rounds and is useless for a full season before it can say anything interesting. With
-one, there is real analysis on day one, against data that already exists. This is the
-single highest-leverage item on the roadmap and it is easy to keep postponing.
+Cold start is what kills an analytics app. With no history the app has zero rounds
+and is useless for a full season before it can say anything interesting. With a
+backfill there is real analysis on day one.
 
-**2. Snapshot the handicap index in effect at the time of each round.**
+The history lives in **18Birdies**, which has no CSV or spreadsheet export — so
+there is no import to write. It is roughly **30 rounds**, entered by hand in one
+sitting of ten or fifteen minutes. That makes the backfill a *data-entry UX*
+problem rather than a parsing problem, and it is why quick-add entry (below) is
+part of this tier rather than a nicety.
+
+The existing spreadsheet is **not** round history — it is a calculator over a
+handful of local courses. It is still worth importing, as seed data for `courses`
+and `tees`, because that is what turns round entry into picking a course from a
+list instead of retyping slope and rating every time.
+
+What 30 rounds unlocks, honestly: the full WHS index (which needs 20), percentiles,
+the distribution, and typical-vs-potential all work immediately. The current-form
+index works with wide error bars at first. Course fit will mostly report *"need
+more rounds here"* until a season accumulates — that is the shrinkage in Tier 4
+behaving correctly, not a bug, but it is worth expecting.
+
+**2. Handicap index at the time of each round: store it when known, derive it
+when not.**
 
 If historical strokes-vs-expected is computed against *today's* index, every past
 round silently rewrites itself every time the index moves — and every trend in the
-app becomes meaningless. The round record has to remember what was true when it was
-played. (Data-science readers: this is point-in-time correctness, the same discipline
-a feature store enforces. It is much cheaper to get right now than to retrofit.)
+app becomes meaningless. (Data-science readers: this is point-in-time correctness,
+the same discipline a feature store enforces.)
+
+The original plan was to store the index on every round. Hand-backfilling makes
+that impossible in practice: nobody remembers what their index was on a Saturday
+two years ago. Fortunately it does not have to be remembered. Once the raw rounds
+are in with their dates, **the index at any date is derivable** — it is the best 8
+of the trailing 20 differentials, which is exactly what the Tier 2 index
+calculation computes.
+
+So `index_at_time` is **nullable**: populated when it is genuinely known (going
+forward, or from an official record), derived from the surrounding rounds when it
+is not. The point-in-time discipline is preserved; the data-entry burden that would
+have blocked the backfill is not.
 
 ### Schema
 
@@ -119,7 +147,7 @@ users              id, email, display_name
 courses            id, name, city, state
 tees               id, course_id, name, par, course_rating, slope_rating, yardage
 rounds             id, user_id, tee_id, played_on, gross_score,
-                   index_at_time, pcc (default 0), is_nine_hole, notes
+                   index_at_time (nullable), pcc (default 0), is_nine_hole, notes
 handicap_snapshots id, user_id, effective_on, index_value
 ```
 
@@ -136,6 +164,11 @@ Notes on the shape:
   disagreeing with the code.
 - **`user_id` from the start**, before auth ships. Adding a column is easy; adding a
   tenancy boundary to a table full of data is not.
+- **Quick-add entry is part of this tier.** After saving, the form keeps the
+  course, tee and date and clears only the score, so consecutive rounds at the
+  same course take a few keystrokes. Entries appear in a running list so a typo
+  is visible before the sitting ends. This is one button and a smarter reset on
+  the form that already has to exist — not a separate screen.
 - **Honest caveat to document:** score-only entry means Adjusted Gross Score is just
   the gross score. True AGS caps each hole at net double bogey, which needs hole-level
   data we have deliberately chosen not to collect. Fine for personal tracking — worth
