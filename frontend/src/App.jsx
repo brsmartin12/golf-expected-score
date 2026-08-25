@@ -98,6 +98,11 @@ export default function App() {
           These are "controlled inputs": React holds the value and the input
           displays it. Typing fires onChange, which updates state, which
           re-renders with the new value. The DOM never holds truth of its own.
+
+          inputMode picks the on-screen keyboard a phone raises. type="number"
+          alone is not enough -- iOS still offers a full keyboard for it. Score
+          and slope are whole numbers ("numeric"); index and rating take a
+          decimal point ("decimal").
         */}
         <label className="field">
           <span className="field__label">Handicap Index</span>
@@ -105,6 +110,7 @@ export default function App() {
             name="handicapIndex"
             type="number"
             step="0.1"
+            inputMode="decimal"
             min="-10"
             max="54"
             required
@@ -120,6 +126,7 @@ export default function App() {
             name="slopeRating"
             type="number"
             step="1"
+            inputMode="numeric"
             min="55"
             max="155"
             required
@@ -136,6 +143,7 @@ export default function App() {
             name="courseRating"
             type="number"
             step="0.1"
+            inputMode="decimal"
             min="0.1"
             required
             placeholder="71.5"
@@ -153,6 +161,7 @@ export default function App() {
             name="score"
             type="number"
             step="1"
+            inputMode="numeric"
             min="1"
             placeholder="88"
             value={form.score}
