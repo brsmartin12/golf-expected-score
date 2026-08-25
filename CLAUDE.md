@@ -68,7 +68,9 @@ understandable steps over large one-shot generations.
 - **Two moments, not one app.** Before the round (what should I shoot here,
   read-only) and after it (log in 15 seconds, get an instant verdict). Both
   happen at the course on a phone, often on bad signal. Every screen and
-  endpoint should belong clearly to one of them — see `ROADMAP.md`.
+  endpoint should belong clearly to one of them — see `ROADMAP.md`. The group boards at step 10
+  are the one exception: a third, unhurried context, read away from the course
+  and likely screenshotted into a group chat.
 
 ## Build order (do not skip ahead)
 1. Pure Python calculation functions (potential score, differential) + pytest
@@ -119,9 +121,15 @@ understandable steps over large one-shot generations.
 9. Deploy: backend + DB to Railway/Render, frontend to Vercel. Wire the
    frontend to the deployed backend URL via an environment variable.
 10. Auth (Supabase Auth or Clerk) + groups, so friends can use it with their
-    own data. Then the group leaderboard ranked by *strokes vs. potential*
-    rather than raw score, and a net match calculator (the math for which is
-    already in `handicap.py`).
+    own data. Then two group boards — a **form table** ranked on who is playing
+    better than their *own* normal right now, and a **season table** ranked on
+    the rate of rounds that beat your potential (the *rate*, not the average:
+    average `strokes_vs_potential` is ≈ −0.93σ, a fixed multiple of the player's
+    own spread, so ranking on it is ranking on consistency) — and a
+    net match calculator (the math for which is already in `handicap.py`). The form
+    metric is a pure function over differentials and belongs in `backend/golf/`
+    with step 7, since it shares the same recency-weighted machinery; only the
+    grouping and the screen wait for step 10. See Tier 5 in `ROADMAP.md`.
 11. (Future) Automatic integration to pull slope and rating values for courses
     from their various tee boxes; real PCC from historical weather.
 
@@ -159,6 +167,13 @@ later and nothing needs moving.
   tests never fail because of rows left over from using the app. This is why
   `db/config.py` is separate and why `db/__init__.py` exports the connection
   objects lazily: the redirect has to happen before any Engine exists.
+- **Negative is good, in everything a golfer sees.** A minus sign already means
+  "under par", so every stroke-denominated number on a screen uses that
+  orientation — the round card, the form table, the season table, anything
+  added later. Analysis primitives may run the other way (`strokes_vs_potential`
+  is higher-is-better) but are never displayed raw; the API exposes a separate
+  display-oriented field instead, as `to_potential` does. See the display
+  convention in `ROADMAP.md`.
 - **Validate at both altitudes.** Pydantic models reject bad input at the HTTP
   boundary (a clean 422); `golf/` keeps its own `ValueError` guards for
   non-HTTP callers. Import the bounds from `golf.handicap` rather than

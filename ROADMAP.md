@@ -54,7 +54,7 @@ That gap is where the whole product lives:
 | Audience | **Me + golf friends** | `user_id` in the schema from day one; auth moves earlier than originally planned |
 | Form factor | **Mobile first, desktop too** | Round entry happens on a phone; see below. Constrains layout and charts from Tier 1 on |
 | Naming | **"Potential", never "expected"** | The number is the best-8-of-20 score, i.e. a good round, not a typical one. `potential_score` / `strokes_vs_potential` / `to_potential` throughout. \"Typical\" is reserved for the median figure that arrives with stored rounds |
-| Display convention | **Golf's to-par orientation** | The gap to potential shows as `+5.0` over (worse) and `-4.0` under (better), because a minus sign already means "under par" to a golfer. `strokes_vs_potential` in the API is the opposite sign on purpose — it is the analysis primitive, where higher is better. Never show it raw |
+| Display convention | **Golf's to-par orientation, for every stroke number in the app** | A minus sign already means "under par" to a golfer, so negative is always the good direction and positive always the bad one — on the round card, the form table, the season table, and anything added later. `strokes_vs_potential` in the API is the opposite sign on purpose: it is an analysis primitive where higher is better, and it is never shown raw. If a new number cannot be expressed with negative-is-better, that is a signal it is the wrong number to put on a screen |
 
 ---
 
@@ -362,10 +362,14 @@ This is where "me + golf friends" pulls auth forward from its original step 6.
   service credential. With SQLAlchemy the practical answer is to enforce
   `user_id` in application code and route every query through one place that
   cannot forget.
-- **Leaderboard ranked by strokes-vs-potential, not raw score.** A 22-handicap can beat
-  a 6-handicap on it. This is the app's entire thesis applied to a friend group, and
-  it is a better game than counting strokes. Three things make it harder than it
-  looks — see "What the leaderboard has to get right" below.
+- **Leaderboard ranked on current form, normalised to each player's own game.**
+  Not "who is the best golfer" — the handicap already answers that, and boringly.
+  The question worth asking a friend group is **who is playing better than their
+  own normal, right now**. A 22-handicap can top it. Paired with a **season
+  table** answering the standings question — who has outgrown their handicap
+  this year. See "The form table" and "The season table" below for both metrics,
+  and "What the leaderboard has to get right" for the three things that make
+  either of them harder than it looks.
 - **Net match calculator.** Given players, a tee, and a format, compute course
   handicaps, allowances, and strokes given and received. `course_handicap` and
   `playing_handicap` in `handicap.py` already do this math — it needs a UI, not new
@@ -407,17 +411,380 @@ concrete about what that means:
 **So: do not build the group tables before authentication.** Build them in the
 same piece of work, once there is more than one real user to put in them.
 
+### The form table
+
+The metric is a **change**, not a level. For each player:
+
+```
+form_delta = weighted mean(recent differentials) - mean(baseline differentials)
+```
+
+**Negative means playing better than their own normal**, in strokes, because
+negative is the good direction everywhere in this app — see the display
+convention in the decisions table. A golfer reading `-2.4` sees two and a half
+strokes to the good without being taught anything.
+
+Rank ascending: most negative at the top.
+
+Note this is subtracted the opposite way round from `strokes_vs_potential`,
+which is an analysis primitive where higher is better and is never displayed.
+Form has no such second orientation — it exists only to be shown, so it is
+defined in the display convention once and never flipped.
+
+Three layers of normalisation fall out of that definition, which together are
+what "normalised to their handicap" actually means:
+
+1. **Course difficulty** — differentials already handle it. That is what a
+   differential is for.
+2. **Ability level** — the comparison is against the player's *own* baseline, so
+   a 22-handicap and a 6-handicap are both being measured against themselves. No
+   handicap arithmetic is needed to make them comparable.
+3. **Volatility** — a 20-handicap's scores swing further than a 6's, so two
+   strokes of improvement do not mean the same thing for both. Dividing the
+   delta by that player's own differential standard deviation gives a
+   standardised version, and since spread scales with handicap, this is the
+   layer that does the actual handicap normalising.
+
+Rank on the **stroke-denominated delta** because it is the one a golfer can read
+without explanation ("Sam is playing 2.1 strokes better than his normal"), and
+carry the standardised version alongside as the tie-break and as the "how
+surprising is this" figure. The standardised version carries the same sign, so
+negative stays good there too.
+
+**It also happens to solve the sandbagging problem, for free.** Read the formula
+again: the Handicap Index does not appear in it. Both terms are the player's own
+differentials, so inflating an index buys nothing — the baseline inflates with
+it. The only way to game a form table is to play badly for months to depress
+your own baseline, which costs real rounds and is a poor trade for a pint. This
+supersedes the earlier suggestion of ranking on the best-8 figure to resist
+manipulation; a form table does not need that defence.
+
+**The windows must not overlap.** If the baseline includes the recent rounds,
+the recent rounds pull the baseline toward themselves and the delta is
+attenuated — real form changes look smaller than they are. Baseline is the
+trailing rounds *before* the recent window.
+
+**How much of a change is actually detectable.** This is the uncomfortable part,
+and it should shape the design rather than be discovered later. With a typical
+amateur differential spread of about 3.5 strokes:
+
+| Recent | Baseline | Std. error | 95% confident at |
+| ------ | -------- | ---------- | ---------------- |
+| 5      | 20       | 1.75       | 3.4 strokes      |
+| 8      | 20       | 1.46       | 2.9 strokes      |
+| 10     | 30       | 1.28       | 2.5 strokes      |
+
+So a two-stroke improvement over five rounds is **not** distinguishable from
+noise. An honest form table would therefore report "no clear change" for almost
+everybody, almost every week — which is correct, and unusable as a game.
+
+The resolution: **rank on the point estimate so there is always an order, and
+mark which gaps are real.** The table stays fun and always has a leader; the
+players who are genuinely in form are visually distinct from the ones who are
+merely at the top this week. Never state a form change as fact when the interval
+covers zero.
+
+**Two separate jobs, easily conflated.** Shrinkage (`n / (n + k)`) makes the
+*ranking* fair when someone has few rounds; the confidence marker makes the app
+*honest* about whether a gap is real. Neither substitutes for the other — a
+shrunk delta can still be noise, and a significant delta still deserves shrinking
+if it rests on six rounds. Both are specified under "What the leaderboard has to
+get right".
+
+**Sequencing.** Everything above is a pure function over lists of differentials,
+so it belongs in `backend/golf/` with tests, alongside the Tier 3 current-form
+work — the two share the same recency-weighted machinery. Only the grouping and
+the screen wait for Tier 5.
+
+### The season table — and why the obvious level metric is a trap
+
+Two boards answering two different questions is worth having. The form table is
+"who is hot"; the season table is the standings.
+
+**What "level" was originally going to mean:** average `strokes_vs_potential`
+over a season — the analysis primitive, where higher is better. (It would never
+have reached a screen in that orientation; see the display convention.)
+
+**That version does not measure what it claims.** An index is the mean of the
+best 8 of the last 20 differentials, so the gap between a player's average round
+and their index is essentially a fixed multiple of *their own spread*. Simulated
+over 20,000 seasons per case:
+
+| Player's spread (σ) | Mean strokes-vs-potential | % of rounds beating potential |
+| ------------------- | ------------------------- | ----------------------------- |
+| 2.0                 | −1.85                     | 18.7%                         |
+| 3.0                 | −2.78                     | 18.6%                         |
+| 3.5                 | −3.24                     | 18.6%                         |
+| 5.0                 | −4.64                     | 18.7%                         |
+| 7.0                 | −6.53                     | 18.4%                         |
+
+The average `strokes_vs_potential` tracks σ almost exactly (−0.93σ across the
+range — negative because almost every round falls short of potential). So **a season
+table ranked on average strokes-vs-potential is a consistency ranking wearing a
+disguise** — the steadiest player wins, whether or not anyone is playing above
+their handicap. Calling that a "level" board mislabels it.
+
+**Use the rate instead.** The right-hand column is flat: about 18.6% at every
+spread. Rate of rounds that beat your potential is spread-neutral, so it
+measures what it says it does, and it is more legible than an average anyway:
+
+> Sam beat his handicap in 7 of 24 rounds — 29%, best in the group.
+
+The ~19% baseline is a natural par line for the board: at 19% you are playing
+exactly to your index, and above it you are outperforming it.
+
+**What it actually detects.** A Handicap Index trails, by construction. A golfer
+improving steadily beats it more often than 19% because the index has not caught
+up. So the season table reads as *"whose handicap does not fit them this year"*.
+
+**The index is a moving target, and it chases you.** Play well and it drops,
+which raises the bar — so beating it gets harder exactly when you are playing
+best. This is not a flaw to design around; it is the single most important fact
+about the season table, and it has three consequences.
+
+*It self-corrects, so nobody can lead forever.* Simulating a player who gains
+four strokes over their first ten rounds and then holds that new level:
+
+| Phase                | Rate of beating potential |
+| -------------------- | ------------------------- |
+| Rounds 1–20          | 33.9%                     |
+| Rounds 21–40         | 19.9% — back to baseline  |
+
+They are still four strokes better than they started. The index simply caught up.
+That reset is a *feature*: it makes the season table a season-long competition
+that starts fresh, rather than a permanent ranking the fastest improver owns
+forever. It also quietly closes the sandbagging hole, since posting real scores
+drags an inflated index back down.
+
+*It forces the window to be the whole season, never a rolling one.* A rolling
+beat-rate decays to 19% the moment a player plateaus, so it measures improvement
+*velocity* — which is the form table's job. Cumulative over the season it is
+robust to when the improvement happened. Same four-stroke gain, varying only in
+timing:
+
+| Improvement spread over | Season beat-rate | Index drop |
+| ----------------------- | ---------------- | ---------- |
+| First 10 rounds         | 27.0%            | 4.02       |
+| First 20 rounds         | 26.9%            | 3.97       |
+| First 30 rounds         | 26.5%            | 3.65       |
+| All 40 rounds           | 25.2%            | 2.97       |
+| Not improving           | 18.5%            | 0.02       |
+
+*It means the index drop under-reports anyone still improving.* The last column
+shows why: a golfer improving right up to the final round measures 2.97 of a
+real 4.0, because the index has not finished catching up. The beat-rate column
+barely moves, because those rounds were banked as beats when they happened.
+
+**So: rank on the season beat-rate, and print the index change in the row.** The
+rate is the fair ranking — spread-neutral and timing-robust. The index change is
+the sentence a golfer actually wants ("you dropped 3.2 this season"), with the
+honest caveat that it lags if they are still improving.
+
+**How the two boards differ.** They correlate, and pretending otherwise would be
+dishonest — but the time scale and the reference point differ:
+
+- **Form** — about 5–10 rounds, measured against the player's own recent
+  baseline. "Who is playing well right now."
+- **Season** — the whole season, measured against the player's index. "Who has
+  outgrown their handicap."
+
+Someone improving all year appears on both. Someone who had one hot month
+appears only on form. Someone steady and accurately handicapped appears on
+neither, which is correct.
+
+**Sandbagging applies here but not to form.** The season table uses the index,
+so it is exposed. The defence is that the WHS index discards bad rounds by
+construction: rank on the official or best-8 figure and never on the
+current-form estimate, and it holds up for a friend group.
+
+**Count or rate?** Rate is fairer — it does not reward whoever played most.
+Count is more fun to say. Rank on the rate, print the count and the index change
+in the row, and shrink the rate toward the ~19% par line for anyone with few
+rounds rather than gating them out — see "What the leaderboard has to get
+right".
+
+**Consistency is a stat, not a third board.** Given that average
+`strokes_vs_potential` is ≈ −0.93σ — a fixed multiple of the player's own spread
+— a consistency board and an average-based level board would be the same board
+twice. Show σ on the player's own page with the
+Tier 3 work, not as a competing ranking.
+
+**Sequencing: ship form first.** It is the differentiated one, it needs no index,
+and it is the reason to open the app. The season table is a straightforward
+addition afterwards and should not delay it.
+
+### What the boards feel like to use
+
+**They belong to a third context, not the two moments.** Before-round and
+after-round both happen at the course, on a phone, in a hurry. A leaderboard is
+checked on the sofa, or opened because someone posted a round and the group chat
+lit up. It is not time-pressured, it is not at the course, and it is the one
+screen that will be **screenshotted into a group chat**. That last point is a
+real design constraint: the layout has to survive being cropped and pasted, and
+it has to explain itself to someone reading it cold.
+
+**The form table.** Volatile on purpose — it should move week to week, and being
+top of it is a streak, not a verdict.
+
+```
+FORM — last 8 rounds vs your own normal              this week
+
+1  Sam      -2.4  ●  playing better than normal        8 rounds
+2  Bri      -0.9  ○  within his normal range           6 rounds
+3  Chris    -0.4  ◌  early days, 5 rounds so far       5 rounds
+4  Dave     +1.6  ○  within his normal range          11 rounds
+
+● a real change   ○ too small to call yet   ◌ provisional
+Nobody here is a better golfer than anyone else. This is who is
+playing above their own usual standard right now.
+```
+
+**The season table.** Slow, cumulative, resets at the start of a season. This is
+the standings.
+
+```
+SEASON 2026 — rounds that beat your own handicap
+
+1  Dave     31%   11 of 35     index  14.2 -> 11.4   -2.8
+2  Sam      24%    6 of 25     index   9.1 ->  8.4   -0.7
+3  Bri      17%    4 of 24     index  12.0 -> 12.1   +0.1
+
+par is 19% — that is how often anyone beats their own handicap
+```
+
+**Six things the screen itself has to say**, not just this document:
+
+1. **Neither board ranks who is the best golfer.** The handicap already does
+   that and everyone knows it. Both are handicap-neutral by construction, so a
+   22 can top either — and the *first* thing anyone will ask is why the
+   22-handicap is winning. Answer it on the screen, in the screenshot.
+2. **The two boards move at different speeds, and that is the point.** Form is
+   supposed to churn. The season table is supposed to barely move. If they ever
+   agree completely, one of them is redundant.
+3. **"Within normal range" is the honest common case.** Most gaps are too small
+   to call — the maths in the form table above says so plainly. The ranking
+   still orders everybody so there is always a leader; the marker is what
+   separates a real run of form from a good fortnight.
+4. **The season table resets.** Say when, on the screen. Otherwise everyone
+   assumes it is all-time and the January standings look broken.
+5. **Last place is not an insult.** Bottom of the form table means playing below
+   your own usual standard this month, which happens to everyone. Word it that
+   way. "Worst" never appears.
+6. **Negative is good, on every board.** `-2.4` on the form table and `-2.8` on
+   the season table both mean strokes to the good, exactly as a scorecard reads.
+   No board anywhere in the app may invert this, however natural "bigger number
+   wins" feels for a leaderboard.
+
+**Failure modes worth designing against:**
+
+- *A new member feels shut out.* They should not be — five rounds is the floor
+  and shrinkage does the protecting. Below five, frame the gap as a short
+  countdown rather than a locked door: they will join mid-season and this is
+  their first impression of the whole feature.
+- *Somebody tops the form table on a few lucky rounds.* Prevented by the
+  shrinkage, not by the minimum — the simulation above shows raw ranking is
+  genuinely unfair at five rounds and shrunk ranking is not. Ship the shrinkage
+  with the first version; it is not a refinement to add later.
+- *Everything reads "within normal range" and the board feels pointless.* The
+  ranking is what carries it; the marker is secondary information. Never hide
+  the order behind the significance test.
+
+**Expect small groups.** Four friends, not forty. A board of two is a
+comparison, not a league, and should probably be laid out as one. Design for
+two to six people and let it degrade gracefully upward, rather than the reverse.
+
+**Notifications are the obvious engagement hook and the obvious way to become
+annoying.** "Sam just took the form lead" is genuinely fun once a week and
+intolerable daily. If it ships at all, it ships opt-in and rate-limited, and not
+before the boards themselves have been used for a season.
+
+### Still undecided
+
+The design above is settled. These parameters are not, and are recorded here so
+that a future session picks them deliberately rather than inventing them halfway
+through an implementation.
+
+- **Window sizes and recency weighting.** "Recent" is written as 5–10 rounds and
+  "baseline" as 20–30 throughout, without a decision, and the exponential decay
+  has no half-life attached. Pick these against the real backfilled history
+  rather than in the abstract — 30 rounds is enough to see what the estimator
+  does with them.
+- **The shrinkage constant `k`.** Provisionally 10, which simulation shows makes
+  a five-round newcomer exactly as likely to top the board as they deserve. It
+  controls how fast a player earns the right to move; worth re-checking against
+  the real backfilled history, but the fairness result is not delicate.
+- **When a season starts.** Calendar year is the obvious default; a northern
+  golf season running roughly April to October is arguably truer and makes the
+  winter reset feel natural rather than arbitrary. Undecided.
+- **Which index the season table counts against.** The official figure from
+  `handicap_snapshots` is the right answer where it exists, but most members
+  will not have entered one, and mixing official indexes for some players with
+  app-computed ones for others makes the ranking incomparable. Probably: use the
+  app's own best-8 figure for everyone, so the board is at least internally
+  consistent, and show the official index separately as information.
+- **How rounds with a null `index_at_time` feed the beat-rate.** The number has
+  to be derived per round from the rounds preceding it, which is the Tier 2 index
+  calculation applied at a historical point rather than to today. Straightforward
+  but not free, and the backfill makes it the common case rather than an edge one.
+- **Nine-hole rounds.** Stored, but the WHS rule for combining two nines into an
+  18-hole differential is not implemented. Until it is they should be excluded
+  from both boards, and the exclusion should be visible rather than silent.
+- **Multiple group membership.** The schema allows it. Whether the form figure is
+  global (the same number in every group) or scoped per group is a product
+  question — global is simpler and probably right, since form is about a player
+  and not about a group.
+- **Tie-breaks.** The form table has one: the standardised delta. The season
+  table has none, and percentages will tie often in a group of four.
+
 ### What the leaderboard has to get right
 
 These are not schema problems, which is exactly why they need writing down —
 they will not surface on their own when the tables get built.
 
-**1. A ranking is meaningless for a member with thin history.** Strokes-vs-
-potential needs each member's index, and an index derived from four rounds is
-noise. A new member will then either top or bottom the table for purely
-statistical reasons, and the leaderboard loses credibility the first week
-somebody joins. Same discipline as course fit in Tier 4: show a position only
-once the data supports it, and say *"needs 6 more rounds"* until then.
+**1. Thin history is handled by shrinking the number, not by excluding the
+player.** The obvious defence — demand a long history before anyone is ranked —
+is the wrong one. At one round a week, a fifteen-round gate is four months of
+sitting out, and a member who joins in May would watch until September. Somebody
+excluded from a leaderboard is not being protected from noise; they are being
+given no reason to come back.
+
+Shrink the delta toward zero by `n / (n + k)` instead, exactly as Tier 4 does for
+course fit, and the fairness problem disappears on its own. Simulated with four
+players where **nobody is actually improving**, so a fair board should put the
+newcomer top a quarter of the time:
+
+| Newcomer's rounds | Raw ranking | Shrunk (k=10) | Signal kept |
+| ----------------- | ----------- | ------------- | ----------- |
+| 5                 | 35.5%       | 25.1%         | 33%         |
+| 7                 | 33.8%       | 25.7%         | 41%         |
+| 10                | 31.6%       | 26.5%         | 50%         |
+| 25                | 24.9%       | 24.9%         | 71%         |
+
+Raw, a five-round newcomer tops the board 35.5% of the time on pure luck.
+Shrunk, 25.1% — fair, at every sample size. **A five-round floor with shrinkage
+is as trustworthy as a twenty-five-round floor without it**, and it lets people
+play.
+
+So: **the minimum is 5 rounds**, which is simply the fewest the metric can be
+computed from — three in the recent window, two in the baseline. The recent
+window adapts (`max(3, min(8, n // 3))`) so it exists at five rounds and settles
+at eight once there is history to fill it. Nobody is ever left off the board for
+having played too little; their number is just pulled toward the middle until
+they have earned the right to move.
+
+The season rate gets the same treatment, shrunk toward the ~19% par line rather
+than toward zero:
+
+| Raw          | Shown |
+| ------------ | ----- |
+| 2 of 5 = 40% | 26%   |
+| 0 of 5 = 0%  | 12%   |
+| 4 of 10 = 40%| 29%   |
+| 8 of 25 = 32%| 28%   |
+
+Note the second row. A newcomer with a rough first month shows 12%, not 0% — a
+small sample should not humiliate anyone either. A member who tops the board on four
+rounds discredits the whole thing in week one.
 
 **2. Sandbagging, with a genuinely awkward twist.** Every handicap-based
 competition invites inflating your handicap, and golf has a word for it. The
@@ -430,11 +797,11 @@ awkward part is which of our two numbers resists it:
     responsiveness is the entire point for a solo golfer, and it is precisely
     what makes it easy to game in a competition.
 
-  So the app's better statistic is its more manipulable one. For a friend group
-  the stakes are a pint and the answer is probably "rank on the best-8 figure,
-  show current form alongside it as information" — but that should be a decision
-  taken deliberately, not a default that falls out of using the headline number
-  everywhere.
+  So the app's better statistic is its more manipulable one. **The form table
+  above sidesteps this entirely** by never using an index: both of its terms are
+  the player's own differentials. This point still stands for any *level*-based
+  board — a season table ranked on strokes-vs-potential is exposed to it, and
+  should rank on the best-8 figure if it is ever built.
 
 **3. Privacy and leaderboard integrity pull against each other.** A per-round
 "don't share this one" flag is trivial to add later. What is not trivial is that
