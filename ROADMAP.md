@@ -622,10 +622,10 @@ FORM — last 8 rounds vs your own normal              this week
 
 1  Sam      -2.4  ●  playing better than normal        8 rounds
 2  Bri      -0.9  ○  within his normal range           6 rounds
-3  Dave     +1.6  ○  within his normal range          11 rounds
-   Chris      --     needs 9 more rounds               6 rounds
+3  Chris    -0.4  ◌  early days, 5 rounds so far       5 rounds
+4  Dave     +1.6  ○  within his normal range          11 rounds
 
-● a real change   ○ too small to call yet
+● a real change   ○ too small to call yet   ◌ provisional
 Nobody here is a better golfer than anyone else. This is who is
 playing above their own usual standard right now.
 ```
@@ -668,12 +668,14 @@ par is 19% — that is how often anyone beats their own handicap
 
 **Failure modes worth designing against:**
 
-- *A new member sees a locked row and feels shut out.* Frame it as a countdown —
-  "9 more rounds and you are on the board" — not as a rejection. They will join
-  mid-season and this is their first impression of the whole feature.
-- *Somebody tops the form table on three lucky rounds.* Prevented by the minimum
-  round count and the confidence marker, but only if both are enforced before
-  launch rather than added after the first complaint.
+- *A new member feels shut out.* They should not be — five rounds is the floor
+  and shrinkage does the protecting. Below five, frame the gap as a short
+  countdown rather than a locked door: they will join mid-season and this is
+  their first impression of the whole feature.
+- *Somebody tops the form table on a few lucky rounds.* Prevented by the
+  shrinkage, not by the minimum — the simulation above shows raw ranking is
+  genuinely unfair at five rounds and shrunk ranking is not. Ship the shrinkage
+  with the first version; it is not a refinement to add later.
 - *Everything reads "within normal range" and the board feels pointless.* The
   ranking is what carries it; the marker is secondary information. Never hide
   the order behind the significance test.
@@ -698,8 +700,10 @@ through an implementation.
   has no half-life attached. Pick these against the real backfilled history
   rather than in the abstract — 30 rounds is enough to see what the estimator
   does with them.
-- **Minimum rounds to be ranked.** Provisionally 15, on the reasoning that both
-  windows need populating. Worth revisiting once the estimator exists.
+- **The shrinkage constant `k`.** Provisionally 10, which simulation shows makes
+  a five-round newcomer exactly as likely to top the board as they deserve. It
+  controls how fast a player earns the right to move; worth re-checking against
+  the real backfilled history, but the fairness result is not delicate.
 - **When a season starts.** Calendar year is the obvious default; a northern
   golf season running roughly April to October is arguably truer and makes the
   winter reset feel natural rather than arbitrary. Undecided.
@@ -728,13 +732,49 @@ through an implementation.
 These are not schema problems, which is exactly why they need writing down —
 they will not surface on their own when the tables get built.
 
-**1. A ranking is meaningless for a member with thin history**, and the form
-table is hungrier than a level-based one because it needs *two* populated
-windows, not one. A new member cannot appear on it at all until they have a
-baseline as well as a recent run — **15 rounds is the working minimum** before
-anyone is ranked at all, and the detectability table above shows why even that
-is generous. Count down to it explicitly and leave them off the ranking until
-they arrive. A member who tops the board on four
+**1. Thin history is handled by shrinking the number, not by excluding the
+player.** The obvious defence — demand a long history before anyone is ranked —
+is the wrong one. At one round a week, a fifteen-round gate is four months of
+sitting out, and a member who joins in May would watch until September. Somebody
+excluded from a leaderboard is not being protected from noise; they are being
+given no reason to come back.
+
+Shrink the delta toward zero by `n / (n + k)` instead, exactly as Tier 4 does for
+course fit, and the fairness problem disappears on its own. Simulated with four
+players where **nobody is actually improving**, so a fair board should put the
+newcomer top a quarter of the time:
+
+| Newcomer's rounds | Raw ranking | Shrunk (k=10) | Signal kept |
+| ----------------- | ----------- | ------------- | ----------- |
+| 5                 | 35.5%       | 25.1%         | 33%         |
+| 7                 | 33.8%       | 25.7%         | 41%         |
+| 10                | 31.6%       | 26.5%         | 50%         |
+| 25                | 24.9%       | 24.9%         | 71%         |
+
+Raw, a five-round newcomer tops the board 35.5% of the time on pure luck.
+Shrunk, 25.1% — fair, at every sample size. **A five-round floor with shrinkage
+is as trustworthy as a twenty-five-round floor without it**, and it lets people
+play.
+
+So: **the minimum is 5 rounds**, which is simply the fewest the metric can be
+computed from — three in the recent window, two in the baseline. The recent
+window adapts (`max(3, min(8, n // 3))`) so it exists at five rounds and settles
+at eight once there is history to fill it. Nobody is ever left off the board for
+having played too little; their number is just pulled toward the middle until
+they have earned the right to move.
+
+The season rate gets the same treatment, shrunk toward the ~19% par line rather
+than toward zero:
+
+| Raw          | Shown |
+| ------------ | ----- |
+| 2 of 5 = 40% | 26%   |
+| 0 of 5 = 0%  | 12%   |
+| 4 of 10 = 40%| 29%   |
+| 8 of 25 = 32%| 28%   |
+
+Note the second row. A newcomer with a rough first month shows 12%, not 0% — a
+small sample should not humiliate anyone either. A member who tops the board on four
 rounds discredits the whole thing in week one.
 
 **2. Sandbagging, with a genuinely awkward twist.** Every handicap-based
