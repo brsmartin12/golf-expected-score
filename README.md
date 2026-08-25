@@ -11,8 +11,9 @@ not your typical score. This app is being built to show both, to estimate how
 you're playing *right now* rather than 20 rounds ago, and to find the courses
 that suit your game. See **[ROADMAP.md](ROADMAP.md)**.
 
-Currently at **step 3** of the build order in `CLAUDE.md`: the calculation core,
-a FastAPI wrapper over it, and a React form that calls it. No database yet.
+Currently partway through **step 4** of the build order in `CLAUDE.md`: the
+calculation core, a FastAPI wrapper, a React form that calls it, and a database
+connection. No tables yet.
 
 ## Layout
 
@@ -52,6 +53,22 @@ cd backend
 pytest -v          # -v names each case, so the suite reads as a spec
 ```
 
+## The database
+
+```bash
+docker compose up -d      # start Postgres 16 on :5432
+docker compose down       # stop it, keeping the data
+```
+
+The app finds it through `DATABASE_URL`, which defaults to the compose setup, so
+nothing needs configuring to get started. To point somewhere else — a local
+install, or a hosted Supabase/Neon database — copy `backend/.env.example` to
+`backend/.env` and change it there.
+
+Confirm it is reachable with `curl localhost:8000/health/db` once the API is
+running, or just run the tests: the database tests skip with an explanatory
+message when Postgres is not up, rather than failing.
+
 ## Running the API
 
 ```bash
@@ -64,7 +81,8 @@ from the type hints where you can fire real requests at the endpoints.
 
 | Method | Route             | Does                                                          |
 | ------ | ----------------- | ------------------------------------------------------------- |
-| GET    | `/health`         | Liveness check                                                 |
+| GET    | `/health`         | Liveness check — deliberately does not touch the database      |
+| GET    | `/health/db`      | Readiness check — can the app reach Postgres?                  |
 | POST   | `/potential-score` | Index + slope + rating → potential score, course handicap      |
 | POST   | `/round`          | A played score → potential, strokes vs. potential, differential |
 

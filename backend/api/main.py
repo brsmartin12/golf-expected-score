@@ -25,9 +25,13 @@ here because a JSON body validated by a Pydantic model is a much better fit for
 five typed inputs than `?handicap_index=10.0&slope_rating=130&...`.
 """
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from db import get_session
 
 from api.schemas import (
     PotentialScoreRequest,
@@ -96,8 +100,34 @@ async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse
 def health() -> dict[str, str]:
     """Liveness check. Deployment platforms poll something like this to decide
     whether a container came up; it is also the quickest way to confirm the
-    server is actually running and reachable."""
+    server is actually running and reachable.
+
+    Deliberately does NOT touch the database: a liveness check that depends on
+    Postgres will report the app as dead during a database blip, and some
+    platforms respond by restarting a perfectly healthy container. See
+    /health/db for the readiness version."""
     return {"status": "ok"}
+
+
+@app.get("/health/db", tags=["meta"])
+def health_db(session: Session = Depends(get_session)) -> dict[str, str]:
+    """Readiness check: can the app actually reach Postgres?
+
+    `Depends(get_session)` is FastAPI's dependency injection. The annotation
+    tells FastAPI to call get_session, pass the session it yields in as this
+    argument, and close it afterwards -- the route never opens or closes a
+    connection itself.
+
+    SELECT 1 is the cheapest possible round trip: it proves the URL, the
+    credentials, the network path and the pool all work, without depending on
+    any table existing.
+
+    text() is required because SQLAlchemy 2.0 will not accept a bare string as
+    a query -- a small guard rail against accidentally interpolating user input
+    into SQL.
+    """
+    session.execute(text("SELECT 1"))
+    return {"database": "ok"}
 
 
 @app.post("/potential-score", response_model=PotentialScoreResponse, tags=["calculate"])
