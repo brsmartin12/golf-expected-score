@@ -59,6 +59,10 @@ understandable steps over large one-shot generations.
   apps; a round must stay a 15-second entry.
 - **Multi-user from the schema up.** This is for the developer *and golf
   friends*, so `user_id` exists from the first table, even before auth ships.
+  Groups themselves are *additive* — two new tables, no changes to existing
+  ones — so they are built with auth at step 10, not before. See Tier 5 in
+  `ROADMAP.md` for the schema and the three problems the leaderboard has to
+  solve that the schema cannot.
 - **Headline feature is the current-form index** (step 7 below). Earlier steps
   exist to make it possible.
 - **Two moments, not one app.** Before the round (what should I shoot here,
