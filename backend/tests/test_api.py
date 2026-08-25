@@ -105,6 +105,36 @@ def test_beating_your_expectation_sets_the_flag():
     assert body["beat_expectation"] is True
 
 
+# ---------------------------------------------------------------------------
+# The two orientations of the same gap
+# ---------------------------------------------------------------------------
+# strokes_vs_expected is for analysis (higher is better). to_expected is for
+# display, in golf's to-par orientation (positive is over, and worse). Getting
+# these backwards in the UI would tell a golfer a bad round was a good one.
+
+
+def test_a_worse_round_is_over_expected():
+    body = client.post("/round", json={**BASELINE, "score": 88}).json()
+
+    assert body["to_expected"] == 5.0  # five OVER, the way a card reads
+    assert body["strokes_vs_expected"] == -5.0
+
+
+def test_a_better_round_is_under_expected():
+    body = client.post("/round", json={**BASELINE, "score": 79}).json()
+
+    assert body["to_expected"] == -4.0  # four UNDER
+    assert body["strokes_vs_expected"] == 4.0
+
+
+@pytest.mark.parametrize("score", [70, 79, 83, 88, 101])
+def test_the_two_orientations_are_always_exact_negatives(score):
+    """Never recomputed independently, so rounding cannot drift them apart."""
+    body = client.post("/round", json={**BASELINE, "score": score}).json()
+
+    assert body["to_expected"] == -body["strokes_vs_expected"]
+
+
 def test_pcc_defaults_to_zero_when_omitted():
     with_default = client.post("/round", json={**BASELINE, "score": 88}).json()
     explicit_zero = client.post(

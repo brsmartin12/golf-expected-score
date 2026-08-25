@@ -161,12 +161,18 @@ body {
   letter-spacing: -0.02em;
 }
 
-.result--good .result__headline {
+/* Under expected is good, over expected is bad -- named for the direction
+   rather than the judgement, so the class cannot drift from the sign. */
+.result--under .result__headline {
   color: var(--good);
 }
 
-.result--under .result__headline {
+.result--over .result__headline {
   color: var(--under);
+}
+
+.result--level .result__headline {
+  color: var(--ink);
 }
 
 .result__verdict {

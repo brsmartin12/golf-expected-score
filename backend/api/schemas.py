@@ -165,7 +165,21 @@ class RoundResponse(BaseModel):
         ...,
         description=(
             "Expected minus actual. POSITIVE means you beat your expectation: "
-            "a 79 against an expectation of 83.0 is +4.0."
+            "a 79 against an expectation of 83.0 is +4.0. This is the ANALYSIS "
+            "orientation -- higher is better, so averaging it across a course "
+            "or a season reads the natural way. For display, use to_expected."
+        ),
+    )
+    to_expected: float = Field(
+        ...,
+        description=(
+            "The same gap in golf's to-par orientation: POSITIVE is over "
+            "(worse), NEGATIVE is under (better). An 88 against an expectation "
+            "of 83.0 is +5.0; a 79 is -4.0. Exactly the negative of "
+            "strokes_vs_expected, and the one to put in front of a golfer -- a "
+            "minus sign already means 'under par', so showing -5.0 for a round "
+            "five strokes WORSE than expected inverts the convention every "
+            "leaderboard has trained them on."
         ),
     )
     score_differential: float = Field(
