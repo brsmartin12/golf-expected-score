@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from db import get_session
 
+from api.routers import courses, rounds
 from api.schemas import (
     PotentialScoreRequest,
     PotentialScoreResponse,
@@ -79,6 +80,12 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+
+# Mounting the routers. Each one carries its own prefix and tags, so this is the
+# whole of the wiring -- the routes themselves live in api/routers/.
+app.include_router(courses.router)
+app.include_router(rounds.router)
 
 
 @app.exception_handler(ValueError)

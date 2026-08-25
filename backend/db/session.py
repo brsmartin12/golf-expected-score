@@ -38,20 +38,15 @@ VITE_API_URL on the frontend.
 
 import os
 
-from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-# Loads backend/.env into the environment if it exists. Real environment
-# variables always win, so a deployed setting is never overridden by a stray
-# local file.
-load_dotenv()
+from db.config import DEFAULT_DATABASE_URL, database_url
 
-# "postgresql+psycopg://" picks the psycopg 3 driver explicitly. Without the
-# +psycopg suffix SQLAlchemy reaches for psycopg2, which is not installed here.
-DEFAULT_DATABASE_URL = "postgresql+psycopg://golf@127.0.0.1:5432/golf"
-
-DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+# "postgresql+psycopg://" in the URL picks the psycopg 3 driver explicitly.
+# Without the +psycopg suffix SQLAlchemy reaches for psycopg2, which is not
+# installed here. See db/config.py for where the value comes from.
+DATABASE_URL = database_url()
 
 engine = create_engine(
     DATABASE_URL,

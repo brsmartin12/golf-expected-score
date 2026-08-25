@@ -11,9 +11,9 @@ not your typical score. This app is being built to show both, to estimate how
 you're playing *right now* rather than 20 rounds ago, and to find the courses
 that suit your game. See **[ROADMAP.md](ROADMAP.md)**.
 
-Currently partway through **step 4** of the build order in `CLAUDE.md`: the
-calculation core, a FastAPI wrapper, a React form that calls it, and a database
-with its tables. Nothing reads or writes them through the API yet.
+Currently at the end of **step 4** of the build order in `CLAUDE.md`: the
+calculation core, a FastAPI wrapper, a React form, and a database that rounds
+can be written to and read back from. The frontend does not use it yet.
 
 ## Layout
 
@@ -52,6 +52,10 @@ project and your edits take effect without reinstalling.
 cd backend
 pytest -v          # -v names each case, so the suite reads as a spec
 ```
+
+Tests use their own `<name>_test` database, created automatically, so a test run
+never touches data you have entered while using the app. Database tests skip
+with an explanatory message when Postgres is not running.
 
 ## The database
 
@@ -95,6 +99,10 @@ from the type hints where you can fire real requests at the endpoints.
 | GET    | `/health/db`      | Readiness check — can the app reach Postgres?                  |
 | POST   | `/potential-score` | Index + slope + rating → potential score, course handicap      |
 | POST   | `/round`          | A played score → potential, strokes vs. potential, differential |
+| GET    | `/courses`        | Courses with their tees — what a course picker renders          |
+| POST   | `/courses`        | Add a course and its tees together                              |
+| GET    | `/rounds`         | Your rounds, most recently *played* first                       |
+| POST   | `/rounds`         | Log a round and get the verdict in the same response            |
 
 ```bash
 curl -X POST http://127.0.0.1:8000/round \
