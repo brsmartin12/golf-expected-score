@@ -79,8 +79,9 @@ understandable steps over large one-shot generations.
    and what gets replaced (the form, once courses and tees are pickable).
 4. Add Postgres with SQLAlchemy as the ORM. Tables: `users`, `courses`, `tees`,
    `rounds`, `handicap_snapshots` — see the schema in `ROADMAP.md`. Being taken
-   in pieces: **connection, sessions and models done** (`backend/db/`,
-   `/health/db`, `docker-compose.yml`); wiring them to the API next. Alembic is
+   in pieces: **connection, sessions, models and API wiring done**
+   (`backend/db/`, `/health/db`, `docker-compose.yml`, `/courses`, `/rounds`);
+   Alembic is
    deliberately not in yet — `python -m db.create_tables` is the stopgap, and
    migrations must land before the step-5 backfill, since thirty hand-entered
    rounds are data worth keeping. Two things
@@ -129,7 +130,10 @@ backend/
   api/main.py         FastAPI routes; api/schemas.py holds the Pydantic models
   db/session.py       SQLAlchemy engine + session factory; reads DATABASE_URL
   db/models.py        the tables: users, courses, tees, rounds, snapshots
-  tests/              test_handicap.py, test_api.py, test_db.py, test_models.py
+  db/config.py        where DATABASE_URL comes from; no side effects on import
+  api/routers/        courses.py and rounds.py, mounted in main.py
+  api/deps.py         get_current_user — the seam auth replaces at step 10
+  tests/              handicap, api, db, models, routes_data
 frontend/             Vite + React single-page app — scaffolding, see step 3
   src/App.jsx         the form, its state, and the submit handler
   src/api.js          the only module that talks to the backend
@@ -146,6 +150,11 @@ later and nothing needs moving.
 - **Database tests skip rather than fail** when no database is reachable — see
   `requires_database` in `tests/conftest.py`. A fresh clone can always run
   `pytest` and watch the maths pass without starting Postgres first.
+- **Tests run against a separate `<name>_test` database**, created on demand by
+  `tests/conftest.py`. Development data is never touched by a test run, and
+  tests never fail because of rows left over from using the app. This is why
+  `db/config.py` is separate and why `db/__init__.py` exports the connection
+  objects lazily: the redirect has to happen before any Engine exists.
 - **Validate at both altitudes.** Pydantic models reject bad input at the HTTP
   boundary (a clean 422); `golf/` keeps its own `ValueError` guards for
   non-HTTP callers. Import the bounds from `golf.handicap` rather than
