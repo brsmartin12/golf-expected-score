@@ -68,16 +68,16 @@ async function postJson(path, body) {
   return response.json();
 }
 
-/** What this Handicap Index is expected to shoot on this tee. */
-export function fetchExpectedScore({ handicapIndex, slopeRating, courseRating }) {
-  return postJson("/expected-score", {
+/** The score this Handicap Index posts on this tee when it plays well. */
+export function fetchPotentialScore({ handicapIndex, slopeRating, courseRating }) {
+  return postJson("/potential-score", {
     handicap_index: handicapIndex,
     slope_rating: slopeRating,
     course_rating: courseRating,
   });
 }
 
-/** Grade a round that was actually played against that expectation. */
+/** Grade a round that was actually played against that potential. */
 export function fetchRoundVerdict({
   score,
   handicapIndex,

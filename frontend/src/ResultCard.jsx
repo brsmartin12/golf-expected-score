@@ -11,11 +11,11 @@
 /**
  * Format the gap the way a scorecard does: "+5.0" for over, "-4.0" for under.
  *
- * This reads off `to_expected`, not `strokes_vs_expected`. The two are exact
+ * This reads off `to_potential`, not `strokes_vs_potential`. The two are exact
  * negatives of each other and it matters which one reaches a golfer: a minus
  * sign already means "under par" on every leaderboard they have ever read, so
- * showing -5.0 for a round five strokes WORSE than expected inverts the one
- * convention they are fluent in. Over is positive here, and positive is bad.
+ * showing -5.0 for a round five strokes WORSE than their potential inverts the
+ * one convention they are fluent in. Over is positive here, and positive is bad.
  */
 function toParStyle(value) {
   if (value > 0) return `+${value.toFixed(1)}`;
@@ -31,31 +31,31 @@ export default function ResultCard({ result }) {
   if (!isRound) {
     return (
       <section className="result">
-        <p className="result__label">Expected score</p>
-        <p className="result__headline">{result.expected_score.toFixed(1)}</p>
+        <p className="result__label">Your potential here</p>
+        <p className="result__headline">{result.potential_score.toFixed(1)}</p>
         <p className="result__note">
-          This is what your index shoots when you play <em>well</em> — an index
-          averages your best 8 of 20, so it measures potential, not your typical
-          round.
+          This is the score you post when you play <em>well</em>, not your
+          typical round — an index averages your best 8 of 20, so 12 of your
+          last 20 rounds are thrown away before it is calculated.
         </p>
       </section>
     );
   }
 
   // Three states, not two: exactly level is its own case, and calling it
-  // "over expected" because it failed a `> 0` test would be a small lie.
-  const gap = result.to_expected;
+  // "over potential" because it failed a `> 0` test would be a small lie.
+  const gap = result.to_potential;
   const tone = gap < 0 ? "under" : gap > 0 ? "over" : "level";
 
   const verdict = {
-    under: `Under your expected ${result.expected_score.toFixed(1)} — better than your index predicted.`,
-    over: `Over your expected ${result.expected_score.toFixed(1)} — short of what your index predicted.`,
-    level: `Exactly your expected ${result.expected_score.toFixed(1)}.`,
+    under: `Under your potential ${result.potential_score.toFixed(1)} — better than the round your index says you can play.`,
+    over: `Over your potential ${result.potential_score.toFixed(1)} — short of the round your index says you can play.`,
+    level: `Exactly your potential ${result.potential_score.toFixed(1)} — you played to your handicap.`,
   }[tone];
 
   return (
     <section className={`result result--${tone}`}>
-      <p className="result__label">Vs. your expected score</p>
+      <p className="result__label">Vs. your potential</p>
       <p className="result__headline">{toParStyle(gap)}</p>
       <p className="result__verdict">{verdict}</p>
 
@@ -65,8 +65,8 @@ export default function ResultCard({ result }) {
           <dd>{result.score.toFixed(0)}</dd>
         </div>
         <div>
-          <dt>Expected</dt>
-          <dd>{result.expected_score.toFixed(1)}</dd>
+          <dt>Potential</dt>
+          <dd>{result.potential_score.toFixed(1)}</dd>
         </div>
         <div>
           <dt>Differential</dt>

@@ -72,8 +72,8 @@ _PAR = Field(
 )
 
 
-class ExpectedScoreRequest(BaseModel):
-    """Inputs for 'what should this handicap shoot on this tee?'"""
+class PotentialScoreRequest(BaseModel):
+    """Inputs for 'what does this handicap shoot here when it plays well?'"""
 
     handicap_index: float = _HANDICAP_INDEX
     slope_rating: float = _SLOPE_RATING
@@ -94,15 +94,23 @@ class ExpectedScoreRequest(BaseModel):
     }
 
 
-class ExpectedScoreResponse(BaseModel):
-    """What a given Handicap Index is expected to shoot on a given tee.
+class PotentialScoreResponse(BaseModel):
+    """What a given Handicap Index posts on a given tee when it plays well.
+
+    NOT its typical score: an index averages the best 8 of the last 20
+    differentials, so this is roughly a top-quartile round. The typical figure
+    needs a scoring record and arrives with the analytics layer.
 
     `course_handicap` and `par_plus_course_handicap` are null when the request
     omitted `par`, since both formulas need it.
     """
 
-    expected_score: float = Field(
-        ..., description="Handicap Index x (Slope / 113) + Course Rating, to one decimal."
+    potential_score: float = Field(
+        ...,
+        description=(
+            "Handicap Index x (Slope / 113) + Course Rating, to one decimal. The "
+            "score this index posts when it plays WELL -- not its typical score."
+        ),
     )
     course_handicap: int | None = Field(
         None, description="Strokes received on this tee, rounded to a whole number."
@@ -110,8 +118,8 @@ class ExpectedScoreResponse(BaseModel):
     par_plus_course_handicap: int | None = Field(
         None,
         description=(
-            "The same expectation as a whole number. Identical formula to "
-            "expected_score -- the Par term cancels -- so the two can sit up to "
+            "The same potential as a whole number. Identical formula to "
+            "potential_score -- the Par term cancels -- so the two can sit up to "
             "half a stroke apart purely from rounding."
         ),
     )
@@ -155,30 +163,30 @@ class RoundRequest(BaseModel):
 
 
 class RoundResponse(BaseModel):
-    """How a played round rates -- the whole point of the app, in four numbers."""
+    """How a played round rates -- the whole point of the app, in a few numbers."""
 
     score: float = Field(..., description="The score submitted, echoed back.")
-    expected_score: float = Field(
-        ..., description="What this Handicap Index was expected to shoot here."
+    potential_score: float = Field(
+        ..., description="What this Handicap Index posts here when it plays well."
     )
-    strokes_vs_expected: float = Field(
+    strokes_vs_potential: float = Field(
         ...,
         description=(
-            "Expected minus actual. POSITIVE means you beat your expectation: "
-            "a 79 against an expectation of 83.0 is +4.0. This is the ANALYSIS "
+            "Potential minus actual. POSITIVE means you beat your potential: "
+            "a 79 against a potential of 83.0 is +4.0. This is the ANALYSIS "
             "orientation -- higher is better, so averaging it across a course "
-            "or a season reads the natural way. For display, use to_expected."
+            "or a season reads the natural way. For display, use to_potential."
         ),
     )
-    to_expected: float = Field(
+    to_potential: float = Field(
         ...,
         description=(
             "The same gap in golf's to-par orientation: POSITIVE is over "
-            "(worse), NEGATIVE is under (better). An 88 against an expectation "
+            "(worse), NEGATIVE is under (better). An 88 against a potential "
             "of 83.0 is +5.0; a 79 is -4.0. Exactly the negative of "
-            "strokes_vs_expected, and the one to put in front of a golfer -- a "
+            "strokes_vs_potential, and the one to put in front of a golfer -- a "
             "minus sign already means 'under par', so showing -5.0 for a round "
-            "five strokes WORSE than expected inverts the convention every "
+            "five strokes WORSE than their potential inverts the convention every "
             "leaderboard has trained them on."
         ),
     )
@@ -189,6 +197,6 @@ class RoundResponse(BaseModel):
             "the number that feeds a Handicap Index."
         ),
     )
-    beat_expectation: bool = Field(
-        ..., description="Convenience flag: was strokes_vs_expected positive?"
+    beat_potential: bool = Field(
+        ..., description="Convenience flag: was strokes_vs_potential positive?"
     )

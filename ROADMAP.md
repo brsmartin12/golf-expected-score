@@ -19,15 +19,21 @@ differentials.
 
 Read that again, because everything below follows from it: an index is a measure of
 your **potential**, not your expectation. It describes the round you shoot when you
-play well — roughly your 20th–25th percentile round. The WHS itself notes that a
-player's *average* differential runs about **3 strokes above** their index.
+play well — roughly a top-quartile round, since 12 of the 20 differentials are
+discarded before the index is calculated.
 
-So the "expected score" this app computes today is subtly mislabelled. It is the
+How far above it your *typical* round sits depends on your consistency: for a
+roughly normal spread the mean of the best 8 of 20 lands around 0.8 standard
+deviations below the overall mean, so a streaky player's gap is wider than a
+steady player's. That gap cannot be derived from an index alone — it needs a
+scoring record, which is exactly what Tier 1 onwards is for.
+
+This is why the code calls that number **potential**, never "expected". It is the
 score you shoot on a good day, not the score you usually shoot.
 
 That gap is where the whole product lives:
 
-- **Show two expectations, not one.** *Potential* (index-based — what the USGA gives
+- **Show two numbers, not one.** *Potential* (index-based — what the USGA gives
   you) and *typical* (your actual mean, learned from your own rounds). "You shot 85.
   Typical for you here is 86.1. Your potential is 83.0." That single screen is
   already something no calculator provides.
@@ -47,7 +53,8 @@ That gap is where the whole product lives:
 | Data entered per round | **Score only** — date, course, tee, total | No hole-by-hole, no fairways/GIR/putts. Low friction is a feature |
 | Audience | **Me + golf friends** | `user_id` in the schema from day one; auth moves earlier than originally planned |
 | Form factor | **Mobile first, desktop too** | Round entry happens on a phone; see below. Constrains layout and charts from Tier 1 on |
-| Display convention | **Golf's to-par orientation** | The gap to expected shows as `+5.0` over (worse) and `-4.0` under (better), because a minus sign already means "under par" to a golfer. `strokes_vs_expected` in the API is the opposite sign on purpose — it is the analysis primitive, where higher is better. Never show it raw |
+| Naming | **"Potential", never "expected"** | The number is the best-8-of-20 score, i.e. a good round, not a typical one. `potential_score` / `strokes_vs_potential` / `to_potential` throughout. \"Typical\" is reserved for the median figure that arrives with stored rounds |
+| Display convention | **Golf's to-par orientation** | The gap to potential shows as `+5.0` over (worse) and `-4.0` under (better), because a minus sign already means "under par" to a golfer. `strokes_vs_potential` in the API is the opposite sign on purpose — it is the analysis primitive, where higher is better. Never show it raw |
 
 ---
 
@@ -112,7 +119,7 @@ smallest possible surface on which to learn React.
 - The CORS allowlist and the production build pipeline.
 - **The to-par display convention** (see the decisions table above). Every later
   screen inherits it.
-- The `ResultCard` framing — the gap to expected as the headline, with the
+- The `ResultCard` framing — the gap to potential as the headline, with the
   expectation as supporting context. That presentation *is* the product thesis.
 - Working familiarity with React, which is the real deliverable of a learning
   project.
@@ -156,7 +163,7 @@ behaving correctly, not a bug, but it is worth expecting.
 **2. Handicap index at the time of each round: store it when known, derive it
 when not.**
 
-If historical strokes-vs-expected is computed against *today's* index, every past
+If historical strokes-vs-potential is computed against *today's* index, every past
 round silently rewrites itself every time the index moves — and every trend in the
 app becomes meaningless. (Data-science readers: this is point-in-time correctness,
 the same discipline a feature store enforces.)
@@ -191,7 +198,7 @@ Notes on the shape:
   original sketch in `CLAUDE.md` had one flat `courses` table with a `tee` column;
   that is the classic mistake here, and it is painful to undo once there are rounds
   pointing at it.
-- **Store raw inputs only.** Differentials, course handicaps and expected scores are
+- **Store raw inputs only.** Differentials, course handicaps and potential scores are
   *derived* — compute them on read through `golf/handicap.py`. Never persist a
   computed value as the source of truth, or a formula fix leaves the database
   disagreeing with the code.
@@ -256,7 +263,7 @@ Model the differential series instead of ranking it.
 *"This course plays well with your game"* — with the statistics that make it true
 rather than merely fun.
 
-- The naive version (mean strokes-vs-expected per course) is pure noise at n=3, and
+- The naive version (mean strokes-vs-potential per course) is pure noise at n=3, and
   will confidently tell you a course you played once on a good day is your best
   course. **Shrink each course's estimate toward zero** — empirical Bayes / James–
   Stein, `effect × n/(n+k)` — and carry a confidence interval alongside it.
@@ -307,7 +314,7 @@ This is where "me + golf friends" pulls auth forward from its original step 6.
   service credential. With SQLAlchemy the practical answer is to enforce
   `user_id` in application code and route every query through one place that
   cannot forget.
-- **Leaderboard ranked by strokes-vs-expected, not raw score.** A 22-handicap can beat
+- **Leaderboard ranked by strokes-vs-potential, not raw score.** A 22-handicap can beat
   a 6-handicap on it. This is the app's entire thesis applied to a friend group, and
   it is a better game than counting strokes.
 - **Net match calculator.** Given players, a tee, and a format, compute course

@@ -19,7 +19,7 @@
 import { useState } from "react";
 
 import ResultCard from "./ResultCard.jsx";
-import { fetchExpectedScore, fetchRoundVerdict } from "./api.js";
+import { fetchPotentialScore, fetchRoundVerdict } from "./api.js";
 
 // Form fields start as strings because <input> values are always strings, even
 // with type="number". Empty string means "untouched", which is how the optional
@@ -72,7 +72,7 @@ export default function App() {
       const played = form.score.trim() !== "";
       const data = played
         ? await fetchRoundVerdict({ ...inputs, score: Number(form.score) })
-        : await fetchExpectedScore(inputs);
+        : await fetchPotentialScore(inputs);
 
       setResult(data);
     } catch (requestError) {
@@ -88,8 +88,8 @@ export default function App() {
       <header className="page__header">
         <h1>Golf Expected Score</h1>
         <p className="page__tagline">
-          What should you shoot here — and was that round actually as bad as it
-          felt?
+          What you shoot here when you play well — and was that round actually
+          as bad as it felt?
         </p>
       </header>
 
@@ -168,7 +168,7 @@ export default function App() {
             onChange={handleChange}
           />
           <span className="field__hint">
-            Add it to grade a round you played. Leave blank for the expectation
+            Add it to grade a round you played. Leave blank for your potential
             alone.
           </span>
         </label>

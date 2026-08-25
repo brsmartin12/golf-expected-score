@@ -30,16 +30,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.schemas import (
-    ExpectedScoreRequest,
-    ExpectedScoreResponse,
+    PotentialScoreRequest,
+    PotentialScoreResponse,
     RoundRequest,
     RoundResponse,
 )
 from golf import (
     course_handicap,
-    expected_score,
+    potential_score,
     score_differential,
-    strokes_vs_expected,
+    strokes_vs_potential,
 )
 
 app = FastAPI(
@@ -47,7 +47,7 @@ app = FastAPI(
     version="0.1.0",
     description=(
         "Turn a raw golf score into a number that means something: what a given "
-        "Handicap Index was expected to shoot on a given tee, and how a round "
+        "Handicap Index posts on a given tee when it plays well, and how a round "
         "actually played compares to it."
     ),
 )
@@ -100,15 +100,15 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/expected-score", response_model=ExpectedScoreResponse, tags=["calculate"])
-def calculate_expected_score(payload: ExpectedScoreRequest) -> ExpectedScoreResponse:
-    """What a Handicap Index is expected to shoot on this course and tee.
+@app.post("/potential-score", response_model=PotentialScoreResponse, tags=["calculate"])
+def calculate_potential_score(payload: PotentialScoreRequest) -> PotentialScoreResponse:
+    """What a Handicap Index posts on this course and tee when it plays well.
 
-    FastAPI reads the `payload: ExpectedScoreRequest` annotation and infers that
+    FastAPI reads the `payload: PotentialScoreRequest` annotation and infers that
     the JSON body should be parsed into that model. There is no decorator
     argument or manual `request.json()` call -- the type hint *is* the wiring.
     """
-    expected = expected_score(
+    potential = potential_score(
         handicap_index=payload.handicap_index,
         slope_rating=payload.slope_rating,
         course_rating=payload.course_rating,
@@ -128,8 +128,8 @@ def calculate_expected_score(payload: ExpectedScoreRequest) -> ExpectedScoreResp
         )
         par_plus = payload.par + course_hcp
 
-    return ExpectedScoreResponse(
-        expected_score=expected,
+    return PotentialScoreResponse(
+        potential_score=potential,
         course_handicap=course_hcp,
         par_plus_course_handicap=par_plus,
     )
@@ -139,17 +139,17 @@ def calculate_expected_score(payload: ExpectedScoreRequest) -> ExpectedScoreResp
 def evaluate_round(payload: RoundRequest) -> RoundResponse:
     """Grade a round that was actually played.
 
-    Returns the score alongside what was expected, the gap between them in both
+    Returns the score alongside the potential, the gap between them in both
     orientations (see the schema), and the Score Differential -- the
     neutral-scale version that makes an 88 on a brutal course comparable to an
     88 on an easy one.
     """
-    expected = expected_score(
+    potential = potential_score(
         handicap_index=payload.handicap_index,
         slope_rating=payload.slope_rating,
         course_rating=payload.course_rating,
     )
-    versus = strokes_vs_expected(
+    versus = strokes_vs_potential(
         score=payload.score,
         handicap_index=payload.handicap_index,
         slope_rating=payload.slope_rating,
@@ -164,11 +164,11 @@ def evaluate_round(payload: RoundRequest) -> RoundResponse:
 
     return RoundResponse(
         score=payload.score,
-        expected_score=expected,
-        strokes_vs_expected=versus,
-        # Negated rather than recomputed from score - expected, so the two can
+        potential_score=potential,
+        strokes_vs_potential=versus,
+        # Negated rather than recomputed from score - potential, so the two can
         # never disagree by a rounding step.
-        to_expected=-versus,
+        to_potential=-versus,
         score_differential=differential,
-        beat_expectation=versus > 0,
+        beat_potential=versus > 0,
     )

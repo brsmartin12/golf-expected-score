@@ -21,7 +21,7 @@ client = TestClient(app)
 # The same baseline as test_handicap.py, so the expected values below are the
 # ones already verified by hand there:
 #   10.0 x 130/113 = 11.504 strokes
-#   expected score:  11.504 + 71.5        = 83.004 -> 83.0
+#   potential score: 11.504 + 71.5        = 83.004 -> 83.0
 #   course handicap: 11.504 + (71.5 - 72) = 11.004 -> 11
 BASELINE = {
     "handicap_index": 10.0,
@@ -47,23 +47,23 @@ def test_openapi_schema_is_generated():
     response = client.get("/openapi.json")
 
     assert response.status_code == 200
-    assert "/expected-score" in response.json()["paths"]
+    assert "/potential-score" in response.json()["paths"]
 
 
 # ---------------------------------------------------------------------------
-# /expected-score
+# /potential-score
 # ---------------------------------------------------------------------------
 
 
-def test_expected_score_returns_the_hand_worked_value():
-    response = client.post("/expected-score", json={**BASELINE, "par": 72})
+def test_potential_score_returns_the_hand_worked_value():
+    response = client.post("/potential-score", json={**BASELINE, "par": 72})
 
     assert response.status_code == 200
-    assert response.json()["expected_score"] == 83.0
+    assert response.json()["potential_score"] == 83.0
 
 
-def test_expected_score_includes_course_handicap_when_par_is_given():
-    response = client.post("/expected-score", json={**BASELINE, "par": 72})
+def test_potential_score_includes_course_handicap_when_par_is_given():
+    response = client.post("/potential-score", json={**BASELINE, "par": 72})
     body = response.json()
 
     assert body["course_handicap"] == 11
@@ -72,11 +72,11 @@ def test_expected_score_includes_course_handicap_when_par_is_given():
 
 def test_par_dependent_fields_are_null_without_par():
     """Rather than defaulting par to 72 and quietly returning a wrong number."""
-    response = client.post("/expected-score", json=BASELINE)
+    response = client.post("/potential-score", json=BASELINE)
     body = response.json()
 
     assert response.status_code == 200
-    assert body["expected_score"] == 83.0
+    assert body["potential_score"] == 83.0
     assert body["course_handicap"] is None
     assert body["par_plus_course_handicap"] is None
 
@@ -86,45 +86,45 @@ def test_par_dependent_fields_are_null_without_par():
 # ---------------------------------------------------------------------------
 
 
-def test_round_grades_a_score_against_expectation():
+def test_round_grades_a_score_against_potential():
     response = client.post("/round", json={**BASELINE, "score": 88})
     body = response.json()
 
     assert response.status_code == 200
-    assert body["expected_score"] == 83.0
-    assert body["strokes_vs_expected"] == -5.0  # five worse than expected
+    assert body["potential_score"] == 83.0
+    assert body["strokes_vs_potential"] == -5.0  # five worse than potential
     assert body["score_differential"] == 14.3
-    assert body["beat_expectation"] is False
+    assert body["beat_potential"] is False
 
 
-def test_beating_your_expectation_sets_the_flag():
+def test_beating_your_potential_sets_the_flag():
     response = client.post("/round", json={**BASELINE, "score": 79})
     body = response.json()
 
-    assert body["strokes_vs_expected"] == 4.0
-    assert body["beat_expectation"] is True
+    assert body["strokes_vs_potential"] == 4.0
+    assert body["beat_potential"] is True
 
 
 # ---------------------------------------------------------------------------
 # The two orientations of the same gap
 # ---------------------------------------------------------------------------
-# strokes_vs_expected is for analysis (higher is better). to_expected is for
+# strokes_vs_potential is for analysis (higher is better). to_potential is for
 # display, in golf's to-par orientation (positive is over, and worse). Getting
 # these backwards in the UI would tell a golfer a bad round was a good one.
 
 
-def test_a_worse_round_is_over_expected():
+def test_a_worse_round_is_over_potential():
     body = client.post("/round", json={**BASELINE, "score": 88}).json()
 
-    assert body["to_expected"] == 5.0  # five OVER, the way a card reads
-    assert body["strokes_vs_expected"] == -5.0
+    assert body["to_potential"] == 5.0  # five OVER, the way a card reads
+    assert body["strokes_vs_potential"] == -5.0
 
 
-def test_a_better_round_is_under_expected():
+def test_a_better_round_is_under_potential():
     body = client.post("/round", json={**BASELINE, "score": 79}).json()
 
-    assert body["to_expected"] == -4.0  # four UNDER
-    assert body["strokes_vs_expected"] == 4.0
+    assert body["to_potential"] == -4.0  # four UNDER
+    assert body["strokes_vs_potential"] == 4.0
 
 
 @pytest.mark.parametrize("score", [70, 79, 83, 88, 101])
@@ -132,7 +132,7 @@ def test_the_two_orientations_are_always_exact_negatives(score):
     """Never recomputed independently, so rounding cannot drift them apart."""
     body = client.post("/round", json={**BASELINE, "score": score}).json()
 
-    assert body["to_expected"] == -body["strokes_vs_expected"]
+    assert body["to_potential"] == -body["strokes_vs_potential"]
 
 
 def test_pcc_defaults_to_zero_when_omitted():
@@ -163,7 +163,7 @@ def test_pcc_shifts_the_differential():
 @pytest.mark.parametrize("bad_slope", [54, 156, 0, -10])
 def test_slope_outside_the_legal_range_is_rejected(bad_slope):
     response = client.post(
-        "/expected-score", json={**BASELINE, "slope_rating": bad_slope}
+        "/potential-score", json={**BASELINE, "slope_rating": bad_slope}
     )
 
     assert response.status_code == 422
@@ -172,7 +172,7 @@ def test_slope_outside_the_legal_range_is_rejected(bad_slope):
 @pytest.mark.parametrize("boundary_slope", [55, 155])
 def test_slope_boundaries_are_accepted(boundary_slope):
     response = client.post(
-        "/expected-score", json={**BASELINE, "slope_rating": boundary_slope}
+        "/potential-score", json={**BASELINE, "slope_rating": boundary_slope}
     )
 
     assert response.status_code == 200
@@ -180,14 +180,14 @@ def test_slope_boundaries_are_accepted(boundary_slope):
 
 def test_non_numeric_input_is_rejected():
     response = client.post(
-        "/expected-score", json={**BASELINE, "slope_rating": "banana"}
+        "/potential-score", json={**BASELINE, "slope_rating": "banana"}
     )
 
     assert response.status_code == 422
 
 
 def test_missing_required_field_is_rejected():
-    response = client.post("/expected-score", json={"handicap_index": 10.0})
+    response = client.post("/potential-score", json={"handicap_index": 10.0})
 
     assert response.status_code == 422
     # The error names the fields that were missing, which is what makes a 422
@@ -198,7 +198,7 @@ def test_missing_required_field_is_rejected():
 
 
 def test_negative_course_rating_is_rejected():
-    response = client.post("/expected-score", json={**BASELINE, "course_rating": -1})
+    response = client.post("/potential-score", json={**BASELINE, "course_rating": -1})
 
     assert response.status_code == 422
 

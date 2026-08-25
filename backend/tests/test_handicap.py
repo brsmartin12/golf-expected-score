@@ -16,19 +16,19 @@ Notes on pytest idioms used here:
 import pytest
 
 from golf.handicap import (
-    _expected_score_exact,
+    _potential_score_exact,
     _round_half_up,
     course_handicap,
-    expected_score,
+    potential_score,
     playing_handicap,
     score_differential,
-    strokes_vs_expected,
+    strokes_vs_potential,
 )
 
 # A representative course: HI 10.0 player, moderately hard tee.
 #   10.0 x 130/113           = 11.504 strokes
 #   course handicap: 11.504 + (71.5 - 72) = 11.004  -> 11
-#   expected score:  11.504 + 71.5        = 83.004  -> 83.0
+#   potential score: 11.504 + 71.5        = 83.004  -> 83.0
 BASELINE = dict(handicap_index=10.0, slope_rating=130, course_rating=71.5)
 BASELINE_PAR = 72
 
@@ -42,8 +42,8 @@ def test_course_handicap_baseline():
     assert course_handicap(**BASELINE, par=BASELINE_PAR) == 11
 
 
-def test_expected_score_baseline():
-    assert expected_score(**BASELINE) == pytest.approx(83.0)
+def test_potential_score_baseline():
+    assert potential_score(**BASELINE) == pytest.approx(83.0)
 
 
 def test_score_differential_baseline():
@@ -52,9 +52,9 @@ def test_score_differential_baseline():
 
 
 def test_scratch_golfer_on_standard_course():
-    """A 0.0 index on a slope-113 course gets no strokes and is expected to shoot the rating."""
+    """A 0.0 index on a slope-113 course gets no strokes, so its potential is the rating."""
     assert course_handicap(0.0, 113, 72.0, 72) == 0
-    assert expected_score(0.0, 113, 72.0) == pytest.approx(72.0)
+    assert potential_score(0.0, 113, 72.0) == pytest.approx(72.0)
 
 
 def test_pcc_adjusts_the_differential():
@@ -104,10 +104,10 @@ def test_round_half_up_goes_away_from_zero(value, expected):
         (30.0, 155, 76.2, 73),
     ],
 )
-def test_par_plus_course_handicap_equals_expected_score(
+def test_par_plus_course_handicap_equals_potential_score(
     handicap_index, slope_rating, course_rating, par
 ):
-    """Par + Course Handicap and Expected Score are the same formula.
+    """Par + Course Handicap and Potential Score are the same formula.
 
         Par + [ HI x (Slope/113) + (CR - Par) ]  ==  HI x (Slope/113) + CR
 
@@ -116,7 +116,7 @@ def test_par_plus_course_handicap_equals_expected_score(
     formula without the other and this fails.
     """
     whole_stroke = par + course_handicap(handicap_index, slope_rating, course_rating, par)
-    exact = _expected_score_exact(handicap_index, slope_rating, course_rating)
+    exact = _potential_score_exact(handicap_index, slope_rating, course_rating)
     assert whole_stroke == _round_half_up(exact)
 
 
@@ -125,9 +125,9 @@ def test_the_two_presentations_can_differ_by_half_a_stroke():
 
     10.0 x 130/113 = 11.504, and here CR == Par, so:
         course handicap -> 12  =>  par + ch = 84
-        expected score  -> 11.504 + 72 = 83.504 -> 83.5
+        potential score -> 11.504 + 72 = 83.504 -> 83.5
     """
-    assert expected_score(10.0, 130, 72.0) == pytest.approx(83.5)
+    assert potential_score(10.0, 130, 72.0) == pytest.approx(83.5)
     assert 72 + course_handicap(10.0, 130, 72.0, 72) == 84
 
 
@@ -154,17 +154,17 @@ def test_playing_handicap_applies_allowance(course_hcp, allowance, expected):
 
 
 # ---------------------------------------------------------------------------
-# Strokes vs expected -- the app's actual purpose
+# Strokes vs potential -- the app's actual purpose
 # ---------------------------------------------------------------------------
 
 
-def test_beating_your_expectation_is_positive():
-    # expected 83.004, shot 79 -> +4.0
-    assert strokes_vs_expected(79, **BASELINE) == pytest.approx(4.0)
+def test_beating_your_potential_is_positive():
+    # potential 83.004, shot 79 -> +4.0
+    assert strokes_vs_potential(79, **BASELINE) == pytest.approx(4.0)
 
 
-def test_missing_your_expectation_is_negative():
-    assert strokes_vs_expected(88, **BASELINE) == pytest.approx(-5.0)
+def test_missing_your_potential_is_negative():
+    assert strokes_vs_potential(88, **BASELINE) == pytest.approx(-5.0)
 
 
 def test_the_whole_point_same_score_different_courses():
@@ -189,13 +189,13 @@ def test_the_whole_point_same_score_different_courses():
 @pytest.mark.parametrize("bad_slope", [0, 54, 156, 200, -10])
 def test_slope_outside_the_legal_range_is_rejected(bad_slope):
     with pytest.raises(ValueError, match="slope_rating"):
-        expected_score(10.0, bad_slope, 71.5)
+        potential_score(10.0, bad_slope, 71.5)
 
 
 @pytest.mark.parametrize("bad_rating", [0, -1.0])
 def test_non_positive_course_rating_is_rejected(bad_rating):
     with pytest.raises(ValueError, match="course_rating"):
-        expected_score(10.0, 130, bad_rating)
+        potential_score(10.0, 130, bad_rating)
 
 
 def test_non_positive_par_is_rejected():
@@ -210,5 +210,5 @@ def test_negative_allowance_is_rejected():
 
 def test_slope_boundaries_are_allowed():
     """55 and 155 are legal; the check is inclusive."""
-    assert expected_score(10.0, 55, 71.5) > 0
-    assert expected_score(10.0, 155, 71.5) > 0
+    assert potential_score(10.0, 55, 71.5) > 0
+    assert potential_score(10.0, 155, 71.5) > 0

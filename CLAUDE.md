@@ -2,13 +2,23 @@
 
 ## What this project is
 A web app that replaces a personal spreadsheet. A user enters their handicap
-index plus a course's slope and rating, and the app shows the expected score
+index plus a course's slope and rating, and the app shows the potential score
 for that handicap on that course/tee — so a "bad" score on a hard course can
 be seen for what it actually is: possibly a strong round.
 
 Core formula (USGA / World Handicap System):
 - Score Differential = (Score − Course Rating) × 113 / Slope Rating
-- Expected Score = Handicap Index × (Slope / 113) + Course Rating
+- Potential Score = Handicap Index × (Slope / 113) + Course Rating
+
+**"Potential", not "expected".** An index averages the best 8 of your last 20
+differentials, so a round matching it is a good round, not a typical one. The
+code says `potential_score` everywhere for this reason — see the module
+docstring in `golf/handicap.py`.
+
+The *product name* is a separate matter and is still unchosen. "Golf Expected
+Score" survives as a placeholder in the `<h1>`, the FastAPI title and the repo
+name — deliberately, not as a missed rename. A title is not a claim about the
+math. Leave it until a real name exists.
 
 **But the calculator is not the product.** The USGA already ships that. The
 product is what you can only say once rounds accumulate: a Handicap Index is the
@@ -53,7 +63,7 @@ understandable steps over large one-shot generations.
   exist to make it possible.
 
 ## Build order (do not skip ahead)
-1. Pure Python calculation functions (expected score, differential) + pytest
+1. Pure Python calculation functions (potential score, differential) + pytest
    unit tests against known-correct values. No web framework yet. **Done.**
 2. Wrap the functions in a FastAPI app with a couple of REST endpoints.
    Verify via FastAPI's auto-generated /docs page. **Done.**
@@ -88,14 +98,14 @@ understandable steps over large one-shot generations.
    spread over your differentials, presented against the official index
    ("official 12.4, playing like a 10.8"), plus consistency as a first-class
    stat and trends reported with honest error bars.
-8. Course fit, done honestly: per-course and per-tee strokes-vs-expected,
+8. Course fit, done honestly: per-course and per-tee strokes-vs-potential,
    shrunk toward zero with confidence intervals, so "this course suits your
    game" is only claimed when the data supports it — and says "need 4 more
    rounds here" when it doesn't.
 9. Deploy: backend + DB to Railway/Render, frontend to Vercel. Wire the
    frontend to the deployed backend URL via an environment variable.
 10. Auth (Supabase Auth or Clerk) + groups, so friends can use it with their
-    own data. Then the group leaderboard ranked by *strokes vs. expected*
+    own data. Then the group leaderboard ranked by *strokes vs. potential*
     rather than raw score, and a net match calculator (the math for which is
     already in `handicap.py`).
 11. (Future) Automatic integration to pull slope and rating values for courses
@@ -130,7 +140,7 @@ later and nothing needs moving.
   rule as `handicap.py`: no framework, no I/O, no database access. The stats
   layer is the part worth proving correct.
 - **Store raw inputs; derive everything else on read.** Differentials, course
-  handicaps and expected scores are computed, never persisted as the source of
+  handicaps and potential scores are computed, never persisted as the source of
   truth — otherwise a formula fix leaves the database disagreeing with the code.
 - Prefer explicit, readable code over clever one-liners; this is a learning
   project.
