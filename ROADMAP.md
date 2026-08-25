@@ -518,6 +518,49 @@ exactly to your index, and above it you are outperforming it.
 improving steadily beats it more often than 19% because the index has not caught
 up. So the season table reads as *"whose handicap does not fit them this year"*.
 
+**The index is a moving target, and it chases you.** Play well and it drops,
+which raises the bar — so beating it gets harder exactly when you are playing
+best. This is not a flaw to design around; it is the single most important fact
+about the season table, and it has three consequences.
+
+*It self-corrects, so nobody can lead forever.* Simulating a player who gains
+four strokes over their first ten rounds and then holds that new level:
+
+| Phase                | Rate of beating potential |
+| -------------------- | ------------------------- |
+| Rounds 1–20          | 33.9%                     |
+| Rounds 21–40         | 19.9% — back to baseline  |
+
+They are still four strokes better than they started. The index simply caught up.
+That reset is a *feature*: it makes the season table a season-long competition
+that starts fresh, rather than a permanent ranking the fastest improver owns
+forever. It also quietly closes the sandbagging hole, since posting real scores
+drags an inflated index back down.
+
+*It forces the window to be the whole season, never a rolling one.* A rolling
+beat-rate decays to 19% the moment a player plateaus, so it measures improvement
+*velocity* — which is the form table's job. Cumulative over the season it is
+robust to when the improvement happened. Same four-stroke gain, varying only in
+timing:
+
+| Improvement spread over | Season beat-rate | Index drop |
+| ----------------------- | ---------------- | ---------- |
+| First 10 rounds         | 27.0%            | 4.02       |
+| First 20 rounds         | 26.9%            | 3.97       |
+| First 30 rounds         | 26.5%            | 3.65       |
+| All 40 rounds           | 25.2%            | 2.97       |
+| Not improving           | 18.5%            | 0.02       |
+
+*It means the index drop under-reports anyone still improving.* The last column
+shows why: a golfer improving right up to the final round measures 2.97 of a
+real 4.0, because the index has not finished catching up. The beat-rate column
+barely moves, because those rounds were banked as beats when they happened.
+
+**So: rank on the season beat-rate, and print the index change in the row.** The
+rate is the fair ranking — spread-neutral and timing-robust. The index change is
+the sentence a golfer actually wants ("you dropped 3.2 this season"), with the
+honest caveat that it lags if they are still improving.
+
 **How the two boards differ.** They correlate, and pretending otherwise would be
 dishonest — but the time scale and the reference point differ:
 
@@ -536,8 +579,8 @@ construction: rank on the official or best-8 figure and never on the
 current-form estimate, and it holds up for a friend group.
 
 **Count or rate?** Rate is fairer — it does not reward whoever played most.
-Count is more fun to say. Rank on the rate, print the count in the row, and
-require a minimum number of rounds before anyone is ranked at all.
+Count is more fun to say. Rank on the rate, print the count and the index change
+in the row, and require a minimum number of rounds before anyone is ranked.
 
 **Consistency is a stat, not a third board.** Given that average
 strokes-vs-potential is ≈ −0.93σ, a consistency board and an average-based level
