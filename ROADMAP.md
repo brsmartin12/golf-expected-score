@@ -364,11 +364,85 @@ This is where "me + golf friends" pulls auth forward from its original step 6.
   cannot forget.
 - **Leaderboard ranked by strokes-vs-potential, not raw score.** A 22-handicap can beat
   a 6-handicap on it. This is the app's entire thesis applied to a friend group, and
-  it is a better game than counting strokes.
+  it is a better game than counting strokes. Three things make it harder than it
+  looks — see "What the leaderboard has to get right" below.
 - **Net match calculator.** Given players, a tee, and a format, compute course
   handicaps, allowances, and strokes given and received. `course_handicap` and
   `playing_handicap` in `handicap.py` already do this math — it needs a UI, not new
   formulas.
+
+### Schema, and why none of it is needed yet
+
+Groups are **purely additive**: two new tables, and not one column changes on an
+existing one.
+
+```
+groups             id, name, created_by_user_id, created_at
+group_memberships  group_id, user_id, role, joined_at   (primary key: group_id + user_id)
+```
+
+Optionally later, and also additive:
+
+```
+outings            id, group_id, tee_id, played_on      -- one round played together
+rounds.outing_id   nullable FK, null for a solo round
+```
+
+That is the whole difference between this and the decisions Tier 1 had to get
+right up front. `rounds.user_id` genuinely *was* expensive to retrofit — every
+existing row would have needed an owner invented for it — which is why it went
+in before authentication existed. Groups are not like that: a join table added
+later starts empty and breaks nothing, so building it now would mean unused
+tables whose shape is still hostage to decisions authentication has not made.
+
+The scaffolding that mattered is therefore already done, and it is worth being
+concrete about what that means:
+
+- `rounds.user_id` exists and is enforced, so every round already has an owner.
+- `users.email` is unique, which is the column an OAuth identity maps onto.
+- `get_current_user` in `api/deps.py` is a single dependency every route already
+  goes through, so multi-user is a change to one function, not to every query.
+- A test already asserts one golfer cannot see another's rounds.
+
+**So: do not build the group tables before authentication.** Build them in the
+same piece of work, once there is more than one real user to put in them.
+
+### What the leaderboard has to get right
+
+These are not schema problems, which is exactly why they need writing down —
+they will not surface on their own when the tables get built.
+
+**1. A ranking is meaningless for a member with thin history.** Strokes-vs-
+potential needs each member's index, and an index derived from four rounds is
+noise. A new member will then either top or bottom the table for purely
+statistical reasons, and the leaderboard loses credibility the first week
+somebody joins. Same discipline as course fit in Tier 4: show a position only
+once the data supports it, and say *"needs 6 more rounds"* until then.
+
+**2. Sandbagging, with a genuinely awkward twist.** Every handicap-based
+competition invites inflating your handicap, and golf has a word for it. The
+awkward part is which of our two numbers resists it:
+
+  - The **official WHS index** averages the *best 8 of 20*. Deliberately bad
+    rounds are discarded, so it is quite resistant by construction.
+  - The **current-form index** — this app's headline feature — is a
+    recency-weighted mean. Bad rounds count fully and move it quickly. That
+    responsiveness is the entire point for a solo golfer, and it is precisely
+    what makes it easy to game in a competition.
+
+  So the app's better statistic is its more manipulable one. For a friend group
+  the stakes are a pint and the answer is probably "rank on the best-8 figure,
+  show current form alongside it as information" — but that should be a decision
+  taken deliberately, not a default that falls out of using the headline number
+  everywhere.
+
+**3. Privacy and leaderboard integrity pull against each other.** A per-round
+"don't share this one" flag is trivial to add later. What is not trivial is that
+a leaderboard where members can hide their bad rounds stops being a leaderboard
+and becomes a ranking of who hid the most. Pick one and be explicit: either
+rounds posted while in a group are visible to that group, or the leaderboard
+openly reports how many rounds each member has withheld. Silently allowing
+hidden rounds is the one option that is actually dishonest.
 
 ## Tier 6 — Stretch
 
