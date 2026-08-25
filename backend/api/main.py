@@ -139,9 +139,10 @@ def calculate_expected_score(payload: ExpectedScoreRequest) -> ExpectedScoreResp
 def evaluate_round(payload: RoundRequest) -> RoundResponse:
     """Grade a round that was actually played.
 
-    Returns the score alongside what was expected, the gap between them, and the
-    Score Differential -- the neutral-scale version that makes an 88 on a brutal
-    course comparable to an 88 on an easy one.
+    Returns the score alongside what was expected, the gap between them in both
+    orientations (see the schema), and the Score Differential -- the
+    neutral-scale version that makes an 88 on a brutal course comparable to an
+    88 on an easy one.
     """
     expected = expected_score(
         handicap_index=payload.handicap_index,
@@ -165,6 +166,9 @@ def evaluate_round(payload: RoundRequest) -> RoundResponse:
         score=payload.score,
         expected_score=expected,
         strokes_vs_expected=versus,
+        # Negated rather than recomputed from score - expected, so the two can
+        # never disagree by a rounding step.
+        to_expected=-versus,
         score_differential=differential,
         beat_expectation=versus > 0,
     )

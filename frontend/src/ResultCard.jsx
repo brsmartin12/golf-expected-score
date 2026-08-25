@@ -8,9 +8,19 @@
  * displays what it's handed.
  */
 
-/** Format a signed number so a good round reads as "+4.0", not "4". */
-function withSign(value) {
-  return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
+/**
+ * Format the gap the way a scorecard does: "+5.0" for over, "-4.0" for under.
+ *
+ * This reads off `to_expected`, not `strokes_vs_expected`. The two are exact
+ * negatives of each other and it matters which one reaches a golfer: a minus
+ * sign already means "under par" on every leaderboard they have ever read, so
+ * showing -5.0 for a round five strokes WORSE than expected inverts the one
+ * convention they are fluent in. Over is positive here, and positive is bad.
+ */
+function toParStyle(value) {
+  if (value > 0) return `+${value.toFixed(1)}`;
+  if (value < 0) return value.toFixed(1); // toFixed already carries the minus
+  return "E"; // level, as a card would print it
 }
 
 export default function ResultCard({ result }) {
@@ -32,17 +42,22 @@ export default function ResultCard({ result }) {
     );
   }
 
-  const beat = result.beat_expectation;
+  // Three states, not two: exactly level is its own case, and calling it
+  // "over expected" because it failed a `> 0` test would be a small lie.
+  const gap = result.to_expected;
+  const tone = gap < 0 ? "under" : gap > 0 ? "over" : "level";
+
+  const verdict = {
+    under: `Under your expected ${result.expected_score.toFixed(1)} — better than your index predicted.`,
+    over: `Over your expected ${result.expected_score.toFixed(1)} — short of what your index predicted.`,
+    level: `Exactly your expected ${result.expected_score.toFixed(1)}.`,
+  }[tone];
 
   return (
-    <section className={`result ${beat ? "result--good" : "result--under"}`}>
-      <p className="result__label">Strokes vs. expected</p>
-      <p className="result__headline">{withSign(result.strokes_vs_expected)}</p>
-      <p className="result__verdict">
-        {beat
-          ? "Better than your index predicted."
-          : "Short of what your index predicted."}
-      </p>
+    <section className={`result result--${tone}`}>
+      <p className="result__label">Vs. your expected score</p>
+      <p className="result__headline">{toParStyle(gap)}</p>
+      <p className="result__verdict">{verdict}</p>
 
       <dl className="result__details">
         <div>
