@@ -13,7 +13,7 @@ that suit your game. See **[ROADMAP.md](ROADMAP.md)**.
 
 Currently partway through **step 4** of the build order in `CLAUDE.md`: the
 calculation core, a FastAPI wrapper, a React form that calls it, and a database
-connection. No tables yet.
+with its tables. Nothing reads or writes them through the API yet.
 
 ## Layout
 
@@ -68,6 +68,16 @@ install, or a hosted Supabase/Neon database — copy `backend/.env.example` to
 Confirm it is reachable with `curl localhost:8000/health/db` once the API is
 running, or just run the tests: the database tests skip with an explanatory
 message when Postgres is not up, rather than failing.
+
+Create the tables with:
+
+```bash
+cd backend && python -m db.create_tables
+```
+
+This is a stopgap. `create_all` only ever creates — it will not alter a table
+that already exists, so once a column changes it silently does nothing. Alembic
+goes in before the step-5 backfill, at which point there is data worth keeping.
 
 ## Running the API
 
