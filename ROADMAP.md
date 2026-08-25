@@ -362,10 +362,12 @@ This is where "me + golf friends" pulls auth forward from its original step 6.
   service credential. With SQLAlchemy the practical answer is to enforce
   `user_id` in application code and route every query through one place that
   cannot forget.
-- **Leaderboard ranked by strokes-vs-potential, not raw score.** A 22-handicap can beat
-  a 6-handicap on it. This is the app's entire thesis applied to a friend group, and
-  it is a better game than counting strokes. Three things make it harder than it
-  looks — see "What the leaderboard has to get right" below.
+- **Leaderboard ranked on current form, normalised to each player's own game.**
+  Not "who is the best golfer" — the handicap already answers that, and boringly.
+  The question worth asking a friend group is **who is playing better than their
+  own normal, right now**. A 22-handicap can top it. See "The form table" below
+  for the metric, and "What the leaderboard has to get right" for the three
+  things that make it harder than it looks.
 - **Net match calculator.** Given players, a tee, and a format, compute course
   handicaps, allowances, and strokes given and received. `course_handicap` and
   `playing_handicap` in `handicap.py` already do this math — it needs a UI, not new
@@ -407,17 +409,86 @@ concrete about what that means:
 **So: do not build the group tables before authentication.** Build them in the
 same piece of work, once there is more than one real user to put in them.
 
+### The form table
+
+The metric is a **change**, not a level. For each player:
+
+```
+form_delta = mean(baseline differentials) - weighted mean(recent differentials)
+```
+
+Positive means playing better than their own normal, in strokes. Rank on it,
+descending.
+
+Three layers of normalisation fall out of that definition, which together are
+what "normalised to their handicap" actually means:
+
+1. **Course difficulty** — differentials already handle it. That is what a
+   differential is for.
+2. **Ability level** — the comparison is against the player's *own* baseline, so
+   a 22-handicap and a 6-handicap are both being measured against themselves. No
+   handicap arithmetic is needed to make them comparable.
+3. **Volatility** — a 20-handicap's scores swing further than a 6's, so two
+   strokes of improvement do not mean the same thing for both. Dividing the
+   delta by that player's own differential standard deviation gives a
+   standardised version, and since spread scales with handicap, this is the
+   layer that does the actual handicap normalising.
+
+Rank on the **stroke-denominated delta** because it is the one a golfer can read
+without explanation ("Sam is playing 2.1 strokes better than his normal"), and
+carry the standardised version alongside as the tie-break and as the "how
+surprising is this" figure.
+
+**It also happens to solve the sandbagging problem, for free.** Read the formula
+again: the Handicap Index does not appear in it. Both terms are the player's own
+differentials, so inflating an index buys nothing — the baseline inflates with
+it. The only way to game a form table is to play badly for months to depress
+your own baseline, which costs real rounds and is a poor trade for a pint. This
+supersedes the earlier suggestion of ranking on the best-8 figure to resist
+manipulation; a form table does not need that defence.
+
+**The windows must not overlap.** If the baseline includes the recent rounds,
+the recent rounds pull the baseline toward themselves and the delta is
+attenuated — real form changes look smaller than they are. Baseline is the
+trailing rounds *before* the recent window.
+
+**How much of a change is actually detectable.** This is the uncomfortable part,
+and it should shape the design rather than be discovered later. With a typical
+amateur differential spread of about 3.5 strokes:
+
+| Recent | Baseline | Std. error | 95% confident at |
+| ------ | -------- | ---------- | ---------------- |
+| 5      | 20       | 1.75       | 3.4 strokes      |
+| 8      | 20       | 1.46       | 2.9 strokes      |
+| 10     | 30       | 1.28       | 2.5 strokes      |
+
+So a two-stroke improvement over five rounds is **not** distinguishable from
+noise. An honest form table would therefore report "no clear change" for almost
+everybody, almost every week — which is correct, and unusable as a game.
+
+The resolution: **rank on the point estimate so there is always an order, and
+mark which gaps are real.** The table stays fun and always has a leader; the
+players who are genuinely in form are visually distinct from the ones who are
+merely at the top this week. Never state a form change as fact when the interval
+covers zero.
+
+**Sequencing.** Everything above is a pure function over lists of differentials,
+so it belongs in `backend/golf/` with tests, alongside the Tier 3 current-form
+work — the two share the same recency-weighted machinery. Only the grouping and
+the screen wait for Tier 5.
+
 ### What the leaderboard has to get right
 
 These are not schema problems, which is exactly why they need writing down —
 they will not surface on their own when the tables get built.
 
-**1. A ranking is meaningless for a member with thin history.** Strokes-vs-
-potential needs each member's index, and an index derived from four rounds is
-noise. A new member will then either top or bottom the table for purely
-statistical reasons, and the leaderboard loses credibility the first week
-somebody joins. Same discipline as course fit in Tier 4: show a position only
-once the data supports it, and say *"needs 6 more rounds"* until then.
+**1. A ranking is meaningless for a member with thin history**, and the form
+table is hungrier than a level-based one because it needs *two* populated
+windows, not one. A new member cannot appear on it at all until they have a
+baseline as well as a recent run — realistically 15 rounds before the number
+means anything, and the table above shows why. Say *"needs 6 more rounds"* and
+leave them off the ranking until then. A member who tops the board on four
+rounds discredits the whole thing in week one.
 
 **2. Sandbagging, with a genuinely awkward twist.** Every handicap-based
 competition invites inflating your handicap, and golf has a word for it. The
@@ -430,11 +501,11 @@ awkward part is which of our two numbers resists it:
     responsiveness is the entire point for a solo golfer, and it is precisely
     what makes it easy to game in a competition.
 
-  So the app's better statistic is its more manipulable one. For a friend group
-  the stakes are a pint and the answer is probably "rank on the best-8 figure,
-  show current form alongside it as information" — but that should be a decision
-  taken deliberately, not a default that falls out of using the headline number
-  everywhere.
+  So the app's better statistic is its more manipulable one. **The form table
+  above sidesteps this entirely** by never using an index: both of its terms are
+  the player's own differentials. This point still stands for any *level*-based
+  board — a season table ranked on strokes-vs-potential is exposed to it, and
+  should rank on the best-8 figure if it is ever built.
 
 **3. Privacy and leaderboard integrity pull against each other.** A per-round
 "don't share this one" flag is trivial to add later. What is not trivial is that

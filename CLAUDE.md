@@ -119,9 +119,12 @@ understandable steps over large one-shot generations.
 9. Deploy: backend + DB to Railway/Render, frontend to Vercel. Wire the
    frontend to the deployed backend URL via an environment variable.
 10. Auth (Supabase Auth or Clerk) + groups, so friends can use it with their
-    own data. Then the group leaderboard ranked by *strokes vs. potential*
-    rather than raw score, and a net match calculator (the math for which is
-    already in `handicap.py`).
+    own data. Then the group **form table** — ranked on who is playing better
+    than their *own* normal right now, not on who is the best golfer — and a net
+    match calculator (the math for which is already in `handicap.py`). The form
+    metric is a pure function over differentials and belongs in `backend/golf/`
+    with step 7, since it shares the same recency-weighted machinery; only the
+    grouping and the screen wait for step 10. See Tier 5 in `ROADMAP.md`.
 11. (Future) Automatic integration to pull slope and rating values for courses
     from their various tee boxes; real PCC from historical weather.
 
