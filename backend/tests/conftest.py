@@ -37,3 +37,52 @@ requires_database = pytest.mark.skipif(
         "run `docker compose up -d` from the repo root, or point DATABASE_URL elsewhere"
     ),
 )
+
+
+# ---------------------------------------------------------------------------
+# Database fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def _tables():
+    """Create the schema once for the whole test session, then drop it.
+
+    Runs against the real database rather than an in-memory stand-in, because
+    the things worth testing here -- CHECK constraints, foreign keys, cascade
+    deletes -- are enforced by Postgres, not by SQLAlchemy.
+    """
+    from db.models import Base
+
+    Base.metadata.create_all(engine)
+    yield
+    Base.metadata.drop_all(engine)
+
+
+@pytest.fixture
+def db_session(_tables):
+    """A session whose writes are always rolled back.
+
+    Each test gets a connection with an open transaction, and the session is
+    bound to that connection. Whatever the test writes is visible to it -- real
+    SQL, really executed, constraints really enforced -- and then the outer
+    transaction is rolled back, so the next test starts from an empty database.
+
+    Faster than recreating tables per test, and it means tests cannot leak rows
+    into each other and pass or fail depending on the order they ran in.
+    """
+    from db.session import SessionLocal
+
+    connection = engine.connect()
+    transaction = connection.begin()
+    session = SessionLocal(bind=connection)
+    try:
+        yield session
+    finally:
+        session.close()
+        # A test that provokes an IntegrityError leaves Postgres to abort the
+        # transaction itself, which deassociates it from the connection. Rolling
+        # back unconditionally then warns about undoing something already undone.
+        if transaction.is_active:
+            transaction.rollback()
+        connection.close()
