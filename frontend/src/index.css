@@ -37,6 +37,8 @@
 body {
   margin: 0;
   padding: 2rem 1rem 4rem;
+  /* Stops iOS inflating text when the phone is turned to landscape. */
+  -webkit-text-size-adjust: 100%;
   background: var(--bg);
   color: var(--ink);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
@@ -94,7 +96,13 @@ body {
 }
 
 .field input {
-  padding: 0.6rem 0.7rem;
+  padding: 0.7rem;
+  /* 44px is the minimum comfortable touch target on a phone -- a fingertip is
+     far less precise than a cursor. Stated as min-height rather than left to
+     fall out of the padding, so a later font change cannot quietly shrink it. */
+  min-height: 44px;
+  /* Must not drop below 16px: iOS Safari zooms the whole page when focusing a
+     smaller input, and does not zoom back out cleanly. */
   font-size: 1rem;
   font-family: inherit;
   color: var(--ink);
@@ -111,6 +119,7 @@ body {
 .submit {
   margin-top: 0.25rem;
   padding: 0.7rem 1rem;
+  min-height: 44px;
   font-size: 1rem;
   font-family: inherit;
   font-weight: 600;
@@ -208,4 +217,25 @@ body {
   font-size: 0.85rem;
   color: var(--ink-soft);
   text-align: left;
+}
+
+/* Narrow phones: the three stat columns get about 72px each at 320px wide,
+   which wraps the shorter labels and overflows the longer ones. One label-and-
+   value row per line reads better and cannot break. */
+@media (max-width: 400px) {
+  .result__details {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+
+  .result__details div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .result__details dd {
+    font-size: 1.25rem;
+  }
 }
