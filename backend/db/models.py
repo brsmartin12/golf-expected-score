@@ -126,8 +126,10 @@ class Tee(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # Indexed because Postgres does not index foreign keys automatically, and
+    # every tee lookup goes through this column (loading a course's tees).
     course_id: Mapped[int] = mapped_column(
-        ForeignKey("courses.id", ondelete="CASCADE")
+        ForeignKey("courses.id", ondelete="CASCADE"), index=True
     )
     name: Mapped[str] = mapped_column(String(40))
     par: Mapped[int] = mapped_column(Integer)
@@ -156,8 +158,12 @@ class Round(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    tee_id: Mapped[int] = mapped_column(ForeignKey("tees.id"))
+    # Both indexed: user_id filters every round query, and tee_id will carry the
+    # per-course and per-tee grouping the Tier 4 course-fit work is built on.
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    tee_id: Mapped[int] = mapped_column(ForeignKey("tees.id"), index=True)
 
     # When it was PLAYED. Distinct from created_at below, and the distinction
     # matters immediately: a backfilled round is played_on 2024 but created now.
@@ -213,7 +219,9 @@ class HandicapSnapshot(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     effective_on: Mapped[date] = mapped_column(Date)
     index_value: Mapped[Numeric] = mapped_column(Numeric(3, 1))
 

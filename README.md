@@ -11,9 +11,10 @@ not your typical score. This app is being built to show both, to estimate how
 you're playing *right now* rather than 20 rounds ago, and to find the courses
 that suit your game. See **[ROADMAP.md](ROADMAP.md)**.
 
-Currently at the end of **step 4** of the build order in `CLAUDE.md`: the
-calculation core, a FastAPI wrapper, a React form, and a database that rounds
-can be written to and read back from. The frontend does not use it yet.
+**Step 4 is complete**: the calculation core, a FastAPI wrapper, a React form,
+and a migrated database that rounds can be written to and read back from. The
+frontend does not use the database yet — that comes with the round-entry screen
+in step 5.
 
 ## Layout
 
@@ -73,15 +74,28 @@ Confirm it is reachable with `curl localhost:8000/health/db` once the API is
 running, or just run the tests: the database tests skip with an explanatory
 message when Postgres is not up, rather than failing.
 
-Create the tables with:
+Create or update the tables with:
 
 ```bash
-cd backend && python -m db.create_tables
+cd backend && alembic upgrade head
 ```
 
-This is a stopgap. `create_all` only ever creates — it will not alter a table
-that already exists, so once a column changes it silently does nothing. Alembic
-goes in before the step-5 backfill, at which point there is data worth keeping.
+Alembic replays an ordered list of schema changes and records which one the
+database is at, so it can bring an existing database forward **without
+destroying the rows in it** — which `create_all` cannot, because it only ever
+creates and silently ignores a table that is already there.
+
+After changing anything in `db/models.py`:
+
+```bash
+alembic revision --autogenerate -m "what changed"   # writes a migration
+alembic upgrade head                                # applies it
+```
+
+Read what autogenerate writes before committing it. It is reliable for columns,
+types and indexes, and blind to intent — a renamed column is emitted as a drop
+plus an add, which would throw the data away. `tests/test_migrations.py` fails
+if the models and the migrations ever disagree.
 
 ## Running the API
 
