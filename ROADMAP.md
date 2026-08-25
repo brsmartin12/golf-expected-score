@@ -305,6 +305,41 @@ existing math: framework-free, no I/O, provable.
   Two states to design, both drawn: with history, and before typical has settled,
   where the card shows potential alone plus a countdown rather than inventing a
   median from four rounds.
+
+  **How typical is computed.** Same formula as potential, different input:
+
+  ```
+  potential_score = index                × (slope/113) + course_rating
+  typical_score   = typical_differential × (slope/113) + course_rating
+  ```
+
+  `typical_differential` is the **median of the last 20 Score Differentials**.
+  Three decisions in that sentence, each with a reason:
+
+  - **Median, not mean.** Golf scores are right-skewed — a lost ball or a triple
+    has no mirror image on the good side. Simulated over 15,000 records with a
+    realistic blow-up rate, a player beats their median exactly 50.0% of the
+    time at every spread, and their mean 53–57%. The 50/50 property is the whole
+    reason typical is fit to headline the card; the mean quietly flatters. The
+    median is also stable where the mean is not: one disaster round moved a
+    20-round mean from 15.88 to 16.88 and left the median at 15.24 untouched. A
+    baseline should not lurch because of one bad Saturday.
+  - **The last 20, the same window the index uses.** Potential and typical then
+    come from the *same rounds* and are directly comparable. An all-time typical
+    against a 20-round potential compares two different populations and the gap
+    between them means nothing.
+  - **Eight rounds minimum.** The median varies by about ±1.4 strokes at eight
+    rounds and ±1.0 at twenty. Below eight, show the countdown rather than a
+    number.
+
+  Expect the gap to land near **0.85σ** — roughly 2.2 strokes for a steady
+  player, 4.2 for a streaky one, which is itself worth surfacing later as a
+  consistency reading.
+
+  **Do not implement this twice.** Typical and the Tier 3 current-form estimate
+  are the same machinery at different settings — typical is unweighted over the
+  last 20, current form is recency-weighted over the same differentials. One
+  function with a weighting parameter, not two that drift apart.
 - **Cross-course translation.** *"Your 85 at Pine Hills is an 81 at Riverside."* The
   differential already normalizes across courses; this just re-expresses it in the
   units golfers actually think in.
