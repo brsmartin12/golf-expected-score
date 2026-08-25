@@ -11,10 +11,9 @@ not your typical score. This app is being built to show both, to estimate how
 you're playing *right now* rather than 20 rounds ago, and to find the courses
 that suit your game. See **[ROADMAP.md](ROADMAP.md)**.
 
-**Step 4 is complete**: the calculation core, a FastAPI wrapper, a React form,
-and a migrated database that rounds can be written to and read back from. The
-frontend does not use the database yet — that comes with the round-entry screen
-in step 5.
+Partway through **step 5**: the calculation core, a FastAPI wrapper, a migrated
+database, and a three-tab React app whose rounds list reads from it. The
+round-entry screen itself is next.
 
 ## Layout
 
@@ -26,9 +25,11 @@ backend/
   api/schemas.py        request/response models
   tests/
 frontend/
-  src/App.jsx           the form and its state
+  src/main.jsx          route table
+  src/App.jsx           the shell: current route plus navigation
+  src/routes/           one file per tab — LogRound, Rounds, Group
+  src/styles/tokens.css every colour, size and space, in one place
   src/api.js            the only module that talks to the backend
-  src/ResultCard.jsx    renders a result
 ```
 
 `api` imports `golf`; `golf` imports nothing from `api`. The math stays testable
@@ -84,6 +85,14 @@ Alembic replays an ordered list of schema changes and records which one the
 database is at, so it can bring an existing database forward **without
 destroying the rows in it** — which `create_all` cannot, because it only ever
 creates and silently ignores a table that is already there.
+
+If the database already has tables but Alembic has never run against it — a
+database built before migrations existed — tell Alembic where it stands before
+upgrading, or it will try to create tables that are already there:
+
+```bash
+alembic stamp head    # once, on a pre-existing database only
+```
 
 After changing anything in `db/models.py`:
 

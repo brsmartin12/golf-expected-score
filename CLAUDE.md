@@ -146,10 +146,12 @@ backend/
   api/routers/        courses.py and rounds.py, mounted in main.py
   api/deps.py         get_current_user — the seam auth replaces at step 10
   tests/              handicap, api, db, models, routes_data
-frontend/             Vite + React single-page app — scaffolding, see step 3
-  src/App.jsx         the form, its state, and the submit handler
+frontend/             Vite + React, React Router, three tabs
+  src/main.jsx        route table
+  src/App.jsx         the shell: current route plus bottom navigation
+  src/routes/         one file per tab — LogRound, Rounds, Group
+  src/styles/tokens.css  design tokens; restyling happens here, not in components
   src/api.js          the only module that talks to the backend
-  src/ResultCard.jsx  renders a result
 ```
 The `backend/` directory exists from step 1 so the frontend has an obvious home
 later and nothing needs moving.
