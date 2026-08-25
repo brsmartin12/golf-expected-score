@@ -68,7 +68,9 @@ understandable steps over large one-shot generations.
 - **Two moments, not one app.** Before the round (what should I shoot here,
   read-only) and after it (log in 15 seconds, get an instant verdict). Both
   happen at the course on a phone, often on bad signal. Every screen and
-  endpoint should belong clearly to one of them — see `ROADMAP.md`.
+  endpoint should belong clearly to one of them — see `ROADMAP.md`. The group boards at step 10
+  are the one exception: a third, unhurried context, read away from the course
+  and likely screenshotted into a group chat.
 
 ## Build order (do not skip ahead)
 1. Pure Python calculation functions (potential score, differential) + pytest

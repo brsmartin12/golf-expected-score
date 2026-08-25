@@ -591,6 +591,85 @@ Tier 3 work, not as a competing ranking.
 and it is the reason to open the app. The season table is a straightforward
 addition afterwards and should not delay it.
 
+### What the boards feel like to use
+
+**They belong to a third context, not the two moments.** Before-round and
+after-round both happen at the course, on a phone, in a hurry. A leaderboard is
+checked on the sofa, or opened because someone posted a round and the group chat
+lit up. It is not time-pressured, it is not at the course, and it is the one
+screen that will be **screenshotted into a group chat**. That last point is a
+real design constraint: the layout has to survive being cropped and pasted, and
+it has to explain itself to someone reading it cold.
+
+**The form table.** Volatile on purpose — it should move week to week, and being
+top of it is a streak, not a verdict.
+
+```
+FORM — last 8 rounds vs your own normal              this week
+
+1  Sam      +2.4  ●  playing better than normal        8 rounds
+2  Bri      +0.9  ○  within his normal range           6 rounds
+3  Dave     -1.6  ○  within his normal range          11 rounds
+   Chris      --     needs 4 more rounds               6 rounds
+
+● a real change   ○ too small to call yet
+Nobody here is a better golfer than anyone else. This is who is
+playing above their own usual standard right now.
+```
+
+**The season table.** Slow, cumulative, resets at the start of a season. This is
+the standings.
+
+```
+SEASON 2026 — rounds that beat your own handicap
+
+1  Dave     31%   11 of 35     index  14.2 -> 11.4   -2.8
+2  Sam      24%    6 of 25     index   9.1 ->  8.4   -0.7
+3  Bri      17%    4 of 24     index  12.0 -> 12.1   +0.1
+
+par is 19% — that is how often anyone beats their own handicap
+```
+
+**Five things the screen itself has to say**, not just this document:
+
+1. **Neither board ranks who is the best golfer.** The handicap already does
+   that and everyone knows it. Both are handicap-neutral by construction, so a
+   22 can top either — and the *first* thing anyone will ask is why the
+   22-handicap is winning. Answer it on the screen, in the screenshot.
+2. **The two boards move at different speeds, and that is the point.** Form is
+   supposed to churn. The season table is supposed to barely move. If they ever
+   agree completely, one of them is redundant.
+3. **"Within normal range" is the honest common case.** Most gaps are too small
+   to call — the maths in the form table above says so plainly. The ranking
+   still orders everybody so there is always a leader; the marker is what
+   separates a real run of form from a good fortnight.
+4. **The season table resets.** Say when, on the screen. Otherwise everyone
+   assumes it is all-time and the January standings look broken.
+5. **Last place is not an insult.** Bottom of the form table means playing below
+   your own usual standard this month, which happens to everyone. Word it that
+   way. "Worst" never appears.
+
+**Failure modes worth designing against:**
+
+- *A new member sees a locked row and feels shut out.* Frame it as a countdown —
+  "4 more rounds and you are on the board" — not as a rejection. They will join
+  mid-season and this is their first impression of the whole feature.
+- *Somebody tops the form table on three lucky rounds.* Prevented by the minimum
+  round count and the confidence marker, but only if both are enforced before
+  launch rather than added after the first complaint.
+- *Everything reads "within normal range" and the board feels pointless.* The
+  ranking is what carries it; the marker is secondary information. Never hide
+  the order behind the significance test.
+
+**Expect small groups.** Four friends, not forty. A board of two is a
+comparison, not a league, and should probably be laid out as one. Design for
+two to six people and let it degrade gracefully upward, rather than the reverse.
+
+**Notifications are the obvious engagement hook and the obvious way to become
+annoying.** "Sam just took the form lead" is genuinely fun once a week and
+intolerable daily. If it ships at all, it ships opt-in and rate-limited, and not
+before the boards themselves have been used for a season.
+
 ### What the leaderboard has to get right
 
 These are not schema problems, which is exactly why they need writing down —
