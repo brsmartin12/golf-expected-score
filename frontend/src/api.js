@@ -41,6 +41,25 @@ function describeError(status, problem) {
   return `Request failed (HTTP ${status}).`;
 }
 
+async function getJson(path) {
+  let response;
+
+  try {
+    response = await fetch(`${API_URL}${path}`);
+  } catch {
+    throw new Error(
+      `Could not reach the API at ${API_URL}. Is the backend running?`,
+    );
+  }
+
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null);
+    throw new Error(describeError(response.status, problem));
+  }
+
+  return response.json();
+}
+
 async function postJson(path, body) {
   let response;
 
@@ -90,4 +109,9 @@ export function fetchRoundVerdict({
     slope_rating: slopeRating,
     course_rating: courseRating,
   });
+}
+
+/** Every round this golfer has logged, most recently played first. */
+export function fetchRounds() {
+  return getJson("/rounds");
 }

@@ -1,0 +1,105 @@
+/* Design tokens — every colour, size and space the app uses.
+ *
+ * The point of putting them here is that restyling later is editing this file
+ * rather than hunting through components. Tier 0's screen already worked this
+ * way with a handful of colour variables; this extends it to type and spacing
+ * and commits to the chosen direction.
+ *
+ * The direction is dark-first by design decision, not by system preference —
+ * so this does NOT follow prefers-color-scheme. A light variant is scaffolded
+ * below because the app is used outdoors in bright sun, where a dark screen is
+ * genuinely harder to read. Switching it on later means setting data-theme on
+ * <html>; the layout, type and accent are shared, only the ground changes.
+ */
+
+:root {
+  /* ---- Ground and ink ------------------------------------------------- */
+  --bg: #0d1211;
+  --surface: #161c1a;
+  --surface-sunk: #0f1513;
+  --surface-raised: #1b2320;
+  --line: #242e2a;
+  --line-soft: #1f2825;
+
+  --ink: #f2f5f2;
+  --ink-soft: #8b9a92;
+  --ink-faint: #6d7a73;
+
+  /* ---- Meaning --------------------------------------------------------- */
+  /* Under is good, over is worse — golf's to-par convention. See ROADMAP.md;
+     these two must never be used the other way round. */
+  --under: #c6f24d;
+  --over: #ff7a59;
+  --level: var(--ink);
+
+  --accent: var(--under);
+  --accent-ink: #0d1211;
+  --danger: #ff6b6b;
+
+  /* ---- Type ------------------------------------------------------------ */
+  /* Loaded from Google Fonts in index.css. Both stacks name real fallbacks
+     because the fonts are fetched over the network, and this app is used at
+     golf courses where there may not be one — see the connectivity note in
+     ROADMAP.md. Archivo Black is a single 900-weight family, so anything using
+     --font-display also sets font-weight: 900, or the fallback renders thin.
+
+     Worth self-hosting before deploying: it removes a third-party request from
+     the critical path and means the typography survives a cold load on bad
+     signal, which a cached Google Fonts response does not guarantee. */
+  --font-display: "Archivo Black", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: Archivo, system-ui, -apple-system, "Segoe UI", Helvetica, sans-serif;
+
+  --text-xs: 0.6875rem;  /* 11px — uppercase labels only */
+  --text-sm: 0.8125rem;  /* 13px */
+  --text-md: 0.9375rem;  /* 15px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.625rem;   /* 26px */
+  --text-hero: 5.375rem; /* 86px — the verdict number */
+
+  /* Inputs must never drop below 16px: iOS Safari zooms the page when
+     focusing anything smaller and does not zoom back cleanly. */
+  --text-input: 1rem;
+
+  --tracking-label: 0.14em;
+
+  /* ---- Space and shape -------------------------------------------------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  --radius-sm: 0.5rem;
+  --radius: 0.75rem;
+  --radius-lg: 1.125rem;
+  --radius-xl: 1.25rem;
+
+  /* A fingertip is far less precise than a cursor. Nothing tappable goes
+     below this. */
+  --tap: 44px;
+
+  --page-max: 32rem;
+}
+
+/* Scaffolded, not yet reachable from the UI: set data-theme="light" on <html>
+   to try it. Same type, same accent, same layout — only the ground swaps. */
+:root[data-theme="light"] {
+  --bg: #f4f6f3;
+  --surface: #ffffff;
+  --surface-sunk: #eef1ed;
+  --surface-raised: #ffffff;
+  --line: #dde3dd;
+  --line-soft: #e8ece7;
+
+  --ink: #131a17;
+  --ink-soft: #5d6b62;
+  --ink-faint: #86958d;
+
+  --under: #2f7d32;
+  --over: #b4442a;
+  --accent: var(--under);
+  --accent-ink: #ffffff;
+  --danger: #a8332b;
+}
