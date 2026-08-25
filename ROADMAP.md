@@ -280,7 +280,66 @@ existing math: framework-free, no I/O, provable.
   payoff on the roadmap, and it closes the exact "was that actually good?" loop that
   motivated the project.
 - **Typical vs. potential.** Both numbers, side by side with the actual score. The
-  headline screen of the whole app.
+  headline screen of the whole app, and **typical is the one that leads**.
+
+  Potential is beaten in only about one round in five — it is the best-8-of-20
+  score by construction. So a card headlined on the gap to potential delivers
+  bad news roughly four times out of five, however well the round was played.
+  Typical is a coin flip for everyone, always, and it answers the question
+  actually being asked in the car park: *was that a good round for me?*
+
+  So: headline the gap to typical, carry the gap to potential beside it as
+  context. That also gives the card four states rather than two — beat both,
+  beat typical only, beat neither, and the rare beat-potential-but-not-typical —
+  which is more interesting than a single verdict and is precisely what a
+  calculator with no history cannot show.
+
+  Note where this leaves the vocabulary. "Expected" was renamed to "potential"
+  because the word was wrong *for the index-based number*, which describes good
+  rounds rather than usual ones. The word itself was never wrong: **typical is
+  the expected score**, the middle of what you actually shoot. Use "typical" in
+  the UI, since it is concrete and cannot be misread — but the app's original
+  question turns out to have a correct answer after all, which is worth
+  remembering when the product name is finally chosen.
+
+  Two states to design, both drawn: with history, and before typical has settled,
+  where the card shows potential alone plus a countdown rather than inventing a
+  median from four rounds.
+
+  **How typical is computed.** Same formula as potential, different input:
+
+  ```
+  potential_score = index                × (slope/113) + course_rating
+  typical_score   = typical_differential × (slope/113) + course_rating
+  ```
+
+  `typical_differential` is the **median of the last 20 Score Differentials**.
+  Three decisions in that sentence, each with a reason:
+
+  - **Median, not mean.** Golf scores are right-skewed — a lost ball or a triple
+    has no mirror image on the good side. Simulated over 15,000 records with a
+    realistic blow-up rate, a player beats their median exactly 50.0% of the
+    time at every spread, and their mean 53–57%. The 50/50 property is the whole
+    reason typical is fit to headline the card; the mean quietly flatters. The
+    median is also stable where the mean is not: one disaster round moved a
+    20-round mean from 15.88 to 16.88 and left the median at 15.24 untouched. A
+    baseline should not lurch because of one bad Saturday.
+  - **The last 20, the same window the index uses.** Potential and typical then
+    come from the *same rounds* and are directly comparable. An all-time typical
+    against a 20-round potential compares two different populations and the gap
+    between them means nothing.
+  - **Eight rounds minimum.** The median varies by about ±1.4 strokes at eight
+    rounds and ±1.0 at twenty. Below eight, show the countdown rather than a
+    number.
+
+  Expect the gap to land near **0.85σ** — roughly 2.2 strokes for a steady
+  player, 4.2 for a streaky one, which is itself worth surfacing later as a
+  consistency reading.
+
+  **Do not implement this twice.** Typical and the Tier 3 current-form estimate
+  are the same machinery at different settings — typical is unweighted over the
+  last 20, current form is recency-weighted over the same differentials. One
+  function with a weighting parameter, not two that drift apart.
 - **Cross-course translation.** *"Your 85 at Pine Hills is an 81 at Riverside."* The
   differential already normalizes across courses; this just re-expresses it in the
   units golfers actually think in.

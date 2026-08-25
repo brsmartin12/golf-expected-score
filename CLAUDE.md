@@ -13,7 +13,10 @@ Core formula (USGA / World Handicap System):
 **"Potential", not "expected".** An index averages the best 8 of your last 20
 differentials, so a round matching it is a good round, not a typical one. The
 code says `potential_score` everywhere for this reason — see the module
-docstring in `golf/handicap.py`.
+docstring in `golf/handicap.py`. The *expected* score — the middle of what
+you actually shoot — is a separate number called **typical**, and it is the one
+that headlines the round card once there is history to compute it from. See
+Tier 2 in `ROADMAP.md`.
 
 The *product name* is a separate matter and is still unchosen. "Golf Expected
 Score" survives as a placeholder in the `<h1>`, the FastAPI title and the repo
