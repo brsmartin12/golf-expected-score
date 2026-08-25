@@ -1,0 +1,39 @@
+# Local Postgres for development.
+#
+#   docker compose up -d      start it (first run downloads the image)
+#   docker compose logs -f    watch it
+#   docker compose down       stop it, keeping the data
+#   docker compose down -v    stop it and delete the data
+#
+# The version here is pinned to match what production will run. Postgres is very
+# stable across minor versions, but "works locally, breaks deployed" is a bad
+# afternoon and pinning costs nothing.
+#
+# Not the only option -- anything that speaks Postgres works, since the app only
+# ever sees DATABASE_URL. A local install or a hosted Supabase/Neon database are
+# both fine; point DATABASE_URL at them instead.
+services:
+  db:
+    image: postgres:16
+    container_name: golf-postgres
+    environment:
+      POSTGRES_USER: golf
+      POSTGRES_PASSWORD: golf
+      POSTGRES_DB: golf
+    ports:
+      # host:container. 5432 on the host is the conventional port, so the
+      # default DATABASE_URL needs no configuration to find this.
+      - "5432:5432"
+    volumes:
+      # A named volume, so data survives `docker compose down` and restarts.
+      - golf-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # `docker compose ps` then reports healthy only once Postgres is actually
+      # accepting connections, not merely once the container has started.
+      test: ["CMD-SHELL", "pg_isready -U golf -d golf"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  golf-pgdata:
