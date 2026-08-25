@@ -1,6 +1,6 @@
 """Golf handicap calculations.
 
-Re-exports the public functions so callers can `from golf import expected_score`
+Re-exports the public functions so callers can `from golf import potential_score`
 instead of reaching into the module path.
 """
 
@@ -9,10 +9,10 @@ from golf.handicap import (
     MIN_SLOPE,
     STANDARD_SLOPE,
     course_handicap,
-    expected_score,
+    potential_score,
     playing_handicap,
     score_differential,
-    strokes_vs_expected,
+    strokes_vs_potential,
 )
 
 __all__ = [
@@ -20,8 +20,8 @@ __all__ = [
     "MIN_SLOPE",
     "STANDARD_SLOPE",
     "course_handicap",
-    "expected_score",
+    "potential_score",
     "playing_handicap",
     "score_differential",
-    "strokes_vs_expected",
+    "strokes_vs_potential",
 ]

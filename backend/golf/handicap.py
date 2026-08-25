@@ -8,17 +8,34 @@ The formulas
 ------------
     Score Differential = (113 / Slope) x (Adjusted Gross Score - Course Rating - PCC)
     Course Handicap    = Handicap Index x (Slope / 113) + (Course Rating - Par)
-    Expected Score     = Handicap Index x (Slope / 113) + Course Rating
+    Potential Score    = Handicap Index x (Slope / 113) + Course Rating
 
-"Par + Course Handicap" and "Expected Score" are the same formula, not two
+"Par + Course Handicap" and "Potential Score" are the same formula, not two
 competing definitions -- the Par term cancels:
 
     Par + [ HI x (Slope/113) + (CR - Par) ]  ==  HI x (Slope/113) + CR
 
 They differ only in rounding. Course Handicap is rounded to a whole number, so
-`par + course_handicap(...)` is an integer while `expected_score(...)` keeps a
+`par + course_handicap(...)` is an integer while `potential_score(...)` keeps a
 decimal; the two can sit up to half a stroke apart. Both are exposed so the UI
 can show whichever reads better.
+
+Why "potential" and not "expected"
+----------------------------------
+This number is widely called an "expected score", and that name is wrong in a
+way that matters here. A Handicap Index is the mean of the best 8 of your last
+20 Score Differentials -- 12 of the 20 are discarded before it is calculated. So
+a round that produces a differential equal to your index is not a typical round
+for you, it is a good one: roughly your top quartile.
+
+Your *typical* score is higher. How much higher depends on your consistency --
+for a roughly normal spread the mean of the best 8 of 20 sits around 0.8
+standard deviations below the overall mean, so a streaky player's gap is wider
+than a steady player's. That gap is not derivable from an index alone; it needs
+a scoring record, which is what the analytics layer is being built for.
+
+Calling it "potential" keeps the distinction visible, and pairs with the
+"typical" figure that arrives once there are stored rounds.
 
 A note on 0.96
 --------------
@@ -64,8 +81,8 @@ def _round_half_up(value: float, decimal_places: int = 0) -> float:
 def _handicap_strokes(handicap_index: float, slope_rating: float) -> float:
     """Handicap Index x (Slope / 113), unrounded.
 
-    The shared core of both `expected_score` and `course_handicap`. Keeping it
-    in one place is what makes the "Par + Course Handicap == Expected Score"
+    The shared core of both `potential_score` and `course_handicap`. Keeping it
+    in one place is what makes the "Par + Course Handicap == Potential Score"
     identity hold by construction instead of by coincidence.
 
     Deliberately unrounded: rounding happens once, at the public boundary.
@@ -76,10 +93,10 @@ def _handicap_strokes(handicap_index: float, slope_rating: float) -> float:
     return handicap_index * (slope_rating / STANDARD_SLOPE)
 
 
-def _expected_score_exact(
+def _potential_score_exact(
     handicap_index: float, slope_rating: float, course_rating: float
 ) -> float:
-    """Expected score with no rounding applied. Used internally for comparisons."""
+    """Potential score with no rounding applied. Used internally for comparisons."""
     return _handicap_strokes(handicap_index, slope_rating) + course_rating
 
 
@@ -129,10 +146,14 @@ def score_differential(
     return _round_half_up(raw, 1)
 
 
-def expected_score(
+def potential_score(
     handicap_index: float, slope_rating: float, course_rating: float
 ) -> float:
-    """The raw score this handicap index should shoot on this course/tee.
+    """The score this Handicap Index posts on this course/tee when it plays well.
+
+    NOT the typical score for this index -- see "Why potential and not expected"
+    in the module docstring. A round matching this number is roughly a
+    top-quartile round.
 
     Rounded to one decimal place. For the whole-stroke version, use
     `par + course_handicap(...)` -- same formula, integer rounding.
@@ -141,7 +162,7 @@ def expected_score(
     _validate_course_rating(course_rating)
 
     return _round_half_up(
-        _expected_score_exact(handicap_index, slope_rating, course_rating), 1
+        _potential_score_exact(handicap_index, slope_rating, course_rating), 1
     )
 
 
@@ -175,19 +196,24 @@ def playing_handicap(course_hcp: int, allowance: float = 1.0) -> int:
     return int(_round_half_up(course_hcp * allowance))
 
 
-def strokes_vs_expected(
+def strokes_vs_potential(
     score: float, handicap_index: float, slope_rating: float, course_rating: float
 ) -> float:
-    """How many strokes better than expected this round was. The point of the app.
+    """How many strokes better than your potential this round was.
 
-    POSITIVE means you BEAT your expectation. Shooting 79 where your index
-    predicts 83.0 returns +4.0.
+    POSITIVE means you BEAT your potential: shooting 79 where your potential is
+    83.0 returns +4.0. This is the ANALYSIS orientation, where higher is better,
+    so averaging it over a course or a season reads the natural way.
 
-    Compares against the unrounded expected score, so the headline number never
+    Do not put this in front of a golfer -- a minus sign already means "under
+    par" to them, so a negative here would label a bad round the way a good one
+    is labelled. The API negates it into `to_potential` for display.
+
+    Compares against the unrounded potential score, so the headline number never
     inherits a rounding artefact.
     """
     _validate_slope(slope_rating)
     _validate_course_rating(course_rating)
 
-    expected = _expected_score_exact(handicap_index, slope_rating, course_rating)
-    return _round_half_up(expected - score, 1)
+    potential = _potential_score_exact(handicap_index, slope_rating, course_rating)
+    return _round_half_up(potential - score, 1)

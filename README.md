@@ -1,6 +1,6 @@
 # Golf Expected Score
 
-Enter a handicap index plus a course's slope and rating, and see the expected
+Enter a handicap index plus a course's slope and rating, and see the potential
 score for that handicap on that tee — so a "bad" score on a hard course can be
 seen for what it actually is.
 
@@ -65,15 +65,15 @@ from the type hints where you can fire real requests at the endpoints.
 | Method | Route             | Does                                                          |
 | ------ | ----------------- | ------------------------------------------------------------- |
 | GET    | `/health`         | Liveness check                                                 |
-| POST   | `/expected-score` | Index + slope + rating → expected score, course handicap       |
-| POST   | `/round`          | A played score → expected, strokes vs. expected, differential  |
+| POST   | `/potential-score` | Index + slope + rating → potential score, course handicap      |
+| POST   | `/round`          | A played score → potential, strokes vs. potential, differential |
 
 ```bash
 curl -X POST http://127.0.0.1:8000/round \
   -H 'Content-Type: application/json' \
   -d '{"score": 88, "handicap_index": 10.0, "slope_rating": 130, "course_rating": 71.5}'
 
-# {"score":88.0,"expected_score":83.0,"strokes_vs_expected":-5.0,
+# {"score":88.0,"potential_score":83.0,"strokes_vs_potential":-5.0,
 #  "score_differential":14.3,"beat_expectation":false}
 ```
 
@@ -89,7 +89,7 @@ npm run dev
 ```
 
 Open <http://localhost:5173>. Enter a handicap index, slope and course rating to
-see what you're expected to shoot; add a score to grade a round you played.
+see what you shoot here when you play well; add a score to grade a round you played.
 
 The backend URL defaults to `http://127.0.0.1:8000`. To point somewhere else,
 copy `.env.example` to `.env` and set `VITE_API_URL` — that's the hook step 9
@@ -98,11 +98,11 @@ uses to aim the deployed frontend at the deployed backend.
 ## Using the math directly
 
 ```python
-from golf import expected_score, score_differential, strokes_vs_expected
+from golf import potential_score, score_differential, strokes_vs_potential
 
-expected_score(10.0, 130, 71.5)        # 83.0  -- what a 10.0 index should shoot
+potential_score(10.0, 130, 71.5)        # 83.0  -- what a 10.0 index should shoot
 score_differential(88, 71.5, 130)      # 14.3  -- how that round rates
-strokes_vs_expected(88, 10.0, 130, 71.5)   # -5.0 -- five worse than expected
+strokes_vs_potential(88, 10.0, 130, 71.5)   # -5.0 -- five worse than potential
 ```
 
-`strokes_vs_expected` is positive when you beat your expectation.
+`strokes_vs_potential` is positive when you beat your expectation.
