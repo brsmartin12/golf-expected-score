@@ -365,9 +365,11 @@ This is where "me + golf friends" pulls auth forward from its original step 6.
 - **Leaderboard ranked on current form, normalised to each player's own game.**
   Not "who is the best golfer" — the handicap already answers that, and boringly.
   The question worth asking a friend group is **who is playing better than their
-  own normal, right now**. A 22-handicap can top it. See "The form table" below
-  for the metric, and "What the leaderboard has to get right" for the three
-  things that make it harder than it looks.
+  own normal, right now**. A 22-handicap can top it. Paired with a **season
+  table** answering the standings question — who has outgrown their handicap
+  this year. See "The form table" and "The season table" below for both metrics,
+  and "What the leaderboard has to get right" for the three things that make
+  either of them harder than it looks.
 - **Net match calculator.** Given players, a tee, and a format, compute course
   handicaps, allowances, and strokes given and received. `course_handicap` and
   `playing_handicap` in `handicap.py` already do this math — it needs a UI, not new
@@ -476,6 +478,75 @@ covers zero.
 so it belongs in `backend/golf/` with tests, alongside the Tier 3 current-form
 work — the two share the same recency-weighted machinery. Only the grouping and
 the screen wait for Tier 5.
+
+### The season table — and why the obvious level metric is a trap
+
+Two boards answering two different questions is worth having. The form table is
+"who is hot"; the season table is the standings.
+
+**What "level" was originally going to mean:** average strokes-vs-potential over
+a season. Positive means beating your handicap.
+
+**That version does not measure what it claims.** An index is the mean of the
+best 8 of the last 20 differentials, so the gap between a player's average round
+and their index is essentially a fixed multiple of *their own spread*. Simulated
+over 20,000 seasons per case:
+
+| Player's spread (σ) | Mean strokes-vs-potential | % of rounds beating potential |
+| ------------------- | ------------------------- | ----------------------------- |
+| 2.0                 | −1.85                     | 18.7%                         |
+| 3.0                 | −2.78                     | 18.6%                         |
+| 3.5                 | −3.24                     | 18.6%                         |
+| 5.0                 | −4.64                     | 18.7%                         |
+| 7.0                 | −6.53                     | 18.4%                         |
+
+The average tracks σ almost exactly (−0.93σ across the range). So **a season
+table ranked on average strokes-vs-potential is a consistency ranking wearing a
+disguise** — the steadiest player wins, whether or not anyone is playing above
+their handicap. Calling that a "level" board mislabels it.
+
+**Use the rate instead.** The right-hand column is flat: about 18.6% at every
+spread. Rate of rounds that beat your potential is spread-neutral, so it
+measures what it says it does, and it is more legible than an average anyway:
+
+> Sam beat his handicap in 7 of 24 rounds — 29%, best in the group.
+
+The ~19% baseline is a natural par line for the board: at 19% you are playing
+exactly to your index, and above it you are outperforming it.
+
+**What it actually detects.** A Handicap Index trails, by construction. A golfer
+improving steadily beats it more often than 19% because the index has not caught
+up. So the season table reads as *"whose handicap does not fit them this year"*.
+
+**How the two boards differ.** They correlate, and pretending otherwise would be
+dishonest — but the time scale and the reference point differ:
+
+- **Form** — about 5–10 rounds, measured against the player's own recent
+  baseline. "Who is playing well right now."
+- **Season** — the whole season, measured against the player's index. "Who has
+  outgrown their handicap."
+
+Someone improving all year appears on both. Someone who had one hot month
+appears only on form. Someone steady and accurately handicapped appears on
+neither, which is correct.
+
+**Sandbagging applies here but not to form.** The season table uses the index,
+so it is exposed. The defence is that the WHS index discards bad rounds by
+construction: rank on the official or best-8 figure and never on the
+current-form estimate, and it holds up for a friend group.
+
+**Count or rate?** Rate is fairer — it does not reward whoever played most.
+Count is more fun to say. Rank on the rate, print the count in the row, and
+require a minimum number of rounds before anyone is ranked at all.
+
+**Consistency is a stat, not a third board.** Given that average
+strokes-vs-potential is ≈ −0.93σ, a consistency board and an average-based level
+board would be the same board twice. Show σ on the player's own page with the
+Tier 3 work, not as a competing ranking.
+
+**Sequencing: ship form first.** It is the differentiated one, it needs no index,
+and it is the reason to open the app. The season table is a straightforward
+addition afterwards and should not delay it.
 
 ### What the leaderboard has to get right
 
