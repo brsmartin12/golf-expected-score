@@ -115,3 +115,40 @@ export function fetchRoundVerdict({
 export function fetchRounds() {
   return getJson("/rounds");
 }
+
+/** Every course with its tees — what the picker renders. */
+export function fetchCourses() {
+  return getJson("/courses");
+}
+
+/** Add a course and its tees together. A course with no tees is useless. */
+export function createCourse({ name, city, state, tee }) {
+  return postJson("/courses", {
+    name,
+    city: city || null,
+    state: state || null,
+    tees: [
+      {
+        name: tee.name,
+        par: tee.par,
+        course_rating: tee.courseRating,
+        slope_rating: tee.slopeRating,
+      },
+    ],
+  });
+}
+
+/**
+ * Log a round. The response carries the verdict, so this is one request rather
+ * than a save followed by a fetch — see the note on POST /rounds in the backend.
+ */
+export function createRound({ teeId, playedOn, grossScore, handicapIndex }) {
+  return postJson("/rounds", {
+    tee_id: teeId,
+    played_on: playedOn,
+    gross_score: grossScore,
+    // Omitted rather than null-ed when unknown, which is the backfill case:
+    // the index is derivable from the surrounding rounds later.
+    ...(handicapIndex === null ? {} : { index_at_time: handicapIndex }),
+  });
+}
