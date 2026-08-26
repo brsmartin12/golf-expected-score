@@ -49,12 +49,13 @@ That gap is where the whole product lives:
 
 | Decision | Choice | Consequence |
 |---|---|---|
-| Headline differentiator | **Current-form index** | Tier 3 is the destination; earlier tiers exist to feed it |
+| Headline differentiator | **Current form** | Tier 3 is the destination; earlier tiers exist to feed it |
 | Data entered per round | **Score only** — date, course, tee, total | No hole-by-hole, no fairways/GIR/putts. Low friction is a feature |
 | Audience | **Me + golf friends** | `user_id` in the schema from day one; auth moves earlier than originally planned |
 | Form factor | **Mobile first, desktop too** | Round entry happens on a phone; see below. Constrains layout and charts from Tier 1 on |
-| Naming | **"Potential", never "expected"** | The number is the best-8-of-20 score, i.e. a good round, not a typical one. `potential_score` / `strokes_vs_potential` / `to_potential` throughout. \"Typical\" is reserved for the median figure that arrives with stored rounds |
-| Display convention | **Golf's to-par orientation, for every stroke number in the app** | A minus sign already means "under par" to a golfer, so negative is always the good direction and positive always the bad one — on the round card, the form table, the season table, and anything added later. `strokes_vs_potential` in the API is the opposite sign on purpose: it is an analysis primitive where higher is better, and it is never shown raw. If a new number cannot be expressed with negative-is-better, that is a signal it is the wrong number to put on a screen |
+| Naming | **"Potential", never "expected"** | Potential is the 20th percentile of your differentials — a good round, not a typical one. `potential_score` / `to_potential` throughout, with `typical_score` / `to_typical` beside them for the median |
+| Handicap index | **The app computes none, and labels nothing one** | Both figures are percentiles instead. See "Stop computing an index at all" below; this is why `handicap_snapshots` and `rounds.index_at_time` do not exist |
+| Display convention | **Golf's to-par orientation, for every stroke number in the app** | A minus sign already means "under par" to a golfer, so negative is always the good direction and positive always the bad one — on the round card, the form table, the season table, and anything added later. `to_typical` and `to_potential` in the API carry that orientation. An analysis primitive may run the opposite way where higher-is-better averages more naturally, but is then never shown raw. If a new number cannot be expressed with negative-is-better, that is a signal it is the wrong number to put on a screen |
 
 ---
 
@@ -128,9 +129,12 @@ nice-to-have next to the logging screen.
   Tier 2. Its *shape* is worth planning now, because it decides what the Tier 1
   queries have to support.
 
-Today `POST /potential-score` answers the before-round question and `POST /round`
-answers the after-round one, so the API already splits along this seam. It is the
-UI and the data layer that still need to.
+The API used to split along this seam with two calculator endpoints. Both went
+with the handicap index: every number the app shows is now a quantile of a
+golfer's own rounds, so the after-round moment is `POST /rounds`, which returns
+the verdict in the same response. The before-round card has no endpoint yet — it
+is the Tier 2 target card, and it reads the same quantiles against a tee the
+golfer has not played yet.
 
 ## Mobile is the primary form factor
 
@@ -187,8 +191,9 @@ smallest possible surface on which to learn React.
 **What survives from Tier 0:**
 
 - `frontend/src/api.js` as the transport boundary. Every later call — post a
-  round, fetch history, get the form index — extends this module. The *pattern*
-  is the durable part, not the two functions currently in it.
+  round, fetch history, read the form table — extends this module. The *pattern*
+  is the durable part, not whichever functions happen to be in it. The two
+  calculator calls it opened with are already gone.
 - The `VITE_API_URL` wiring, used verbatim when the frontend is deployed.
 - The CORS allowlist and the production build pipeline.
 - **The to-par display convention** (see the decisions table above). Every later
@@ -228,31 +233,33 @@ handful of local courses. It is still worth importing, as seed data for `courses
 and `tees`, because that is what turns round entry into picking a course from a
 list instead of retyping slope and rating every time.
 
-What 30 rounds unlocks, honestly: the full WHS index (which needs 20), percentiles,
-the distribution, and typical-vs-potential all work immediately. The current-form
-index works with wide error bars at first. Course fit will mostly report *"need
+What 30 rounds unlocks, honestly: typical and potential (which want 20 for a
+full window), percentiles, and the distribution all work immediately. Current
+form works with wide error bars at first. Course fit will mostly report *"need
 more rounds here"* until a season accumulates — that is the shrinkage in Tier 4
 behaving correctly, not a bug, but it is worth expecting.
 
-**2. Handicap index at the time of each round: store it when known, derive it
-when not.**
+**2. Each round is graded on the rounds played before it, and nothing else.**
 
-If historical strokes-vs-potential is computed against *today's* index, every past
-round silently rewrites itself every time the index moves — and every trend in the
-app becomes meaningless. (Data-science readers: this is point-in-time correctness,
-the same discipline a feature store enforces.)
+If a past round is compared against *today's* typical, it silently rewrites
+itself every time a new score is logged — and every trend in the app becomes
+meaningless. (Data-science readers: this is point-in-time correctness, the same
+discipline a feature store enforces.)
 
-The original plan was to store the index on every round. Hand-backfilling makes
-that impossible in practice: nobody remembers what their index was on a Saturday
-two years ago. Fortunately it does not have to be remembered. Once the raw rounds
-are in with their dates, **the index at any date is derivable** — it is the best 8
-of the trailing 20 differentials, which is exactly what the Tier 2 index
-calculation computes.
+Two earlier plans for this are worth recording, because both were wrong in the
+same direction. The first was to store the index on every round; hand-backfilling
+makes that impossible, since nobody remembers their index from a Saturday two
+years ago. The second was to make that column nullable and derive it when absent.
 
-So `index_at_time` is **nullable**: populated when it is genuinely known (going
-forward, or from an official record), derived from the surrounding rounds when it
-is not. The point-in-time discipline is preserved; the data-entry burden that would
-have blocked the backfill is not.
+Neither is needed. **`played_on` is sufficient on its own**: sort the rounds by
+the date they were played, and each one's history is the rounds before it in that
+list. `golf.scoring.trailing` does exactly that, and `api/routers/rounds.py`
+grades the whole series in one pass. A backfilled round entered last but played
+first correctly gets no history at all, and becomes history for everything after
+it.
+
+The lesson generalises: point-in-time correctness comes from recording *when*
+something happened, not from remembering what the answer was at the time.
 
 ### Schema
 
@@ -261,9 +268,12 @@ users              id, email, display_name
 courses            id, name, city, state
 tees               id, course_id, name, par, course_rating, slope_rating, yardage
 rounds             id, user_id, tee_id, played_on, gross_score,
-                   index_at_time (nullable), pcc (default 0), is_nine_hole, notes
-handicap_snapshots id, user_id, effective_on, index_value
+                   pcc (default 0), is_nine_hole, notes, created_at
 ```
+
+Four tables, not six. `handicap_snapshots` and `rounds.index_at_time` were both
+built and then dropped — see "Stop computing an index at all" below. What is left
+is the raw record of what was played, which is the only thing worth storing.
 
 Notes on the shape:
 
@@ -272,10 +282,9 @@ Notes on the shape:
   original sketch in `CLAUDE.md` had one flat `courses` table with a `tee` column;
   that is the classic mistake here, and it is painful to undo once there are rounds
   pointing at it.
-- **Store raw inputs only.** Differentials, course handicaps and potential scores are
-  *derived* — compute them on read through `golf/handicap.py`. Never persist a
-  computed value as the source of truth, or a formula fix leaves the database
-  disagreeing with the code.
+- **Store raw inputs only.** Differentials, typical and potential are *derived* —
+  compute them on read through `golf/`. Never persist a computed value as the
+  source of truth, or a formula fix leaves the database disagreeing with the code.
 - **`user_id` from the start**, before auth ships. Adding a column is easy; adding a
   tenancy boundary to a table full of data is not.
 - **Quick-add entry is part of this tier.** After saving, the form keeps the
@@ -288,7 +297,7 @@ Notes on the shape:
   data we have deliberately chosen not to collect. Fine for personal tracking — worth
   stating plainly rather than pretending the number is official.
 
-## The app's index will not match GHIN, and should not try
+## The app's figures will not match GHIN, and should not try
 
 **Decision: compute our own number, name it as ours, and show the official one
 beside it when it is known.** Do not chase agreement with GHIN.
@@ -424,13 +433,15 @@ All of these are pure functions living beside `handicap.py` in `backend/golf/`, 
 pytest tests written against known-correct values first. Same treatment as the
 existing math: framework-free, no I/O, provable.
 
-- **Full WHS index calculation.** Best 8 of the last 20, plus the low-index safeguard,
-  the exceptional-score reduction, and the reduced-table rules for players with fewer
-  than 20 rounds. Fiddly, entirely deterministic, and a perfect fit for the
-  test-first approach the project already uses.
-- **Index projection / what-if.** *"Shoot 84 today and your index goes 12.4 → 12.1."*
-  This is the single most-Googled question in amateur golf and the USGA app buries it.
-  It falls straight out of the index calculation above.
+- **Typical and potential.** ✅ Built — `golf/scoring.py`. The two quantiles, the
+  20-round window, the inverse that turns a differential back into a score on a
+  tee, and `trailing`, which grades each round on the rounds played before it.
+  This replaced what used to be first on this list, a full WHS index calculation:
+  see "Stop computing an index at all" above for why that is not being built.
+- **What-if projection.** *"Shoot 84 today and your typical goes 89.2 → 88.9."*
+  The single most-Googled question in amateur golf, and the USGA app buries it.
+  Cheaper against a percentile than against an index: append the hypothetical
+  differential, re-run the quantile, and show the difference.
 - **Round percentile.** *"Your 85 was your 12th-best differential of 47 — you shoot
   this or better 26% of the time."* Near-zero implementation cost, largest emotional
   payoff on the roadmap, and it closes the exact "was that actually good?" loop that
@@ -462,15 +473,16 @@ existing math: framework-free, no I/O, provable.
   where the card shows potential alone plus a countdown rather than inventing a
   median from four rounds.
 
-  **How typical is computed.** Same formula as potential, different input:
+  **How the two are computed.** One calculation, two settings:
 
   ```
-  potential_score = index                × (slope/113) + course_rating
-  typical_score   = typical_differential × (slope/113) + course_rating
+  typical_differential   = median (50th percentile) of the last 20
+  potential_differential = 20th percentile of the last 20
+  score on this tee      = differential × (slope/113) + course_rating + pcc
   ```
 
-  `typical_differential` is the **median of the last 20 Score Differentials**.
-  Three decisions in that sentence, each with a reason:
+  Three decisions in "the median of the last 20 Score Differentials", each with
+  a reason:
 
   - **Median, not mean.** Golf scores are right-skewed — a lost ball or a triple
     has no mirror image on the good side. Simulated over 15,000 records with a
@@ -500,19 +512,22 @@ existing math: framework-free, no I/O, provable.
   differential already normalizes across courses; this just re-expresses it in the
   units golfers actually think in.
 - **Pre-round target card.** For today's course and tee: your typical score, your
-  potential score, the score that would lower your index, and your best round here.
-  A reason to open the app *before* playing, not only after.
+  potential score, the score that would move your typical down, and your best
+  round here. A reason to open the app *before* playing, not only after.
 
-## Tier 3 — Current-form index (the headline)
+## Tier 3 — Current form (the headline)
 
 Model the differential series instead of ranking it.
 
-- **Estimate running mean μ and spread σ** over your differentials with an
+- **Estimate a running centre and spread** over your differentials with an
   exponentially weighted estimator, or a small state-space / Kalman formulation.
   Recent rounds dominate, so a hot streak shows up immediately instead of waiting for
   20 rounds to turn over.
-- **Derive a form index** from μ and σ on the same scale as the official index, so the
-  two can sit next to each other: *"Official 12.4. You're playing like a 10.8."*
+- **Show it against the flat figure**, in strokes on the tee in front of you, so
+  the two sit next to each other: *"You usually shoot 88 here. Right now you're
+  playing like an 85."* Both sides are the same kind of number — a quantile of
+  the same differentials, one weighted and one not — which is what makes the
+  comparison legible rather than a comparison of two different measures.
 - **Consistency (σ) as a first-class stat**, trended over time. See the two-12-
   handicaps point above — this is a real, legible difference between players that
   every other golf app throws away.
@@ -526,7 +541,7 @@ Model the differential series instead of ranking it.
 *"This course plays well with your game"* — with the statistics that make it true
 rather than merely fun.
 
-- The naive version (mean strokes-vs-potential per course) is pure noise at n=3, and
+- The naive version (mean strokes to potential per course) is pure noise at n=3, and
   will confidently tell you a course you played once on a good day is your best
   course. **Shrink each course's estimate toward zero** — empirical Bayes / James–
   Stein, `effect × n/(n+k)` — and carry a confidence interval alongside it.
@@ -641,10 +656,10 @@ strokes to the good without being taught anything.
 
 Rank ascending: most negative at the top.
 
-Note this is subtracted the opposite way round from `strokes_vs_potential`,
-which is an analysis primitive where higher is better and is never displayed.
-Form has no such second orientation — it exists only to be shown, so it is
-defined in the display convention once and never flipped.
+Form has only this one orientation. Where an analysis primitive is defined the
+other way round for averaging, the API exposes a display-oriented field beside it
+(`to_typical`, `to_potential`); form exists only to be shown, so it is defined in
+the display convention once and never flipped.
 
 Three layers of normalisation fall out of that definition, which together are
 what "normalised to their handicap" actually means:
@@ -667,7 +682,8 @@ surprising is this" figure. The standardised version carries the same sign, so
 negative stays good there too.
 
 **It also happens to solve the sandbagging problem, for free.** Read the formula
-again: the Handicap Index does not appear in it. Both terms are the player's own
+again: no handicap appears in it — which is unsurprising, since the app computes
+none. Both terms are the player's own
 differentials, so inflating an index buys nothing — the baseline inflates with
 it. The only way to game a form table is to play badly for months to depress
 your own baseline, which costs real rounds and is a poor trade for a pint. This
@@ -716,28 +732,30 @@ the screen wait for Tier 5.
 Two boards answering two different questions is worth having. The form table is
 "who is hot"; the season table is the standings.
 
-**What "level" was originally going to mean:** average `strokes_vs_potential`
-over a season — the analysis primitive, where higher is better. (It would never
-have reached a screen in that orientation; see the display convention.)
+**What "level" was originally going to mean:** the average gap to potential over
+a season.
 
-**That version does not measure what it claims.** An index is the mean of the
-best 8 of the last 20 differentials, so the gap between a player's average round
-and their index is essentially a fixed multiple of *their own spread*. Simulated
-over 20,000 seasons per case:
+**That version does not measure what it claims.** Potential sits at a fixed
+percentile of a player's own differentials, so the gap between their average
+round and their potential is essentially a fixed multiple of *their own spread*.
+Simulated over 20,000 seasons per case:
 
-| Player's spread (σ) | Mean strokes-vs-potential | % of rounds beating potential |
-| ------------------- | ------------------------- | ----------------------------- |
-| 2.0                 | −1.85                     | 18.7%                         |
-| 3.0                 | −2.78                     | 18.6%                         |
-| 3.5                 | −3.24                     | 18.6%                         |
-| 5.0                 | −4.64                     | 18.7%                         |
-| 7.0                 | −6.53                     | 18.4%                         |
+| Player's spread (σ) | Mean gap to potential | % of rounds beating potential |
+| ------------------- | --------------------- | ----------------------------- |
+| 2.0                 | 1.85                  | 18.7%                         |
+| 3.0                 | 2.78                  | 18.6%                         |
+| 3.5                 | 3.24                  | 18.6%                         |
+| 5.0                 | 4.64                  | 18.7%                         |
+| 7.0                 | 6.53                  | 18.4%                         |
 
-The average `strokes_vs_potential` tracks σ almost exactly (−0.93σ across the
-range — negative because almost every round falls short of potential). So **a season
-table ranked on average strokes-vs-potential is a consistency ranking wearing a
-disguise** — the steadiest player wins, whether or not anyone is playing above
-their handicap. Calling that a "level" board mislabels it.
+(Simulated against the best-8-of-20 figure the app used at the time. A 20th
+percentile sits a few tenths away from that, so the multiple shifts slightly and
+the *invariance* — the point of the table — does not.)
+
+The average gap tracks σ almost exactly, at ≈ 0.93σ across the range. So **a
+season table ranked on the average gap to potential is a consistency ranking
+wearing a disguise** — the steadiest player wins, whether or not anyone is
+playing above their normal. Calling that a "level" board mislabels it.
 
 **Use the rate instead.** The right-hand column is flat: about 18.6% at every
 spread. Rate of rounds that beat your potential is spread-neutral, so it
@@ -807,20 +825,21 @@ Someone improving all year appears on both. Someone who had one hot month
 appears only on form. Someone steady and accurately handicapped appears on
 neither, which is correct.
 
-**Sandbagging applies here but not to form.** The season table uses the index,
-so it is exposed. The defence is that the WHS index discards bad rounds by
-construction: rank on the official or best-8 figure and never on the
-current-form estimate, and it holds up for a friend group.
+**Sandbagging applies here but not to form.** The season table measures rounds
+against a player's own potential, so padding that potential is worth something.
+The defence is the percentile itself: a 20th-percentile figure barely moves when
+the bad four-fifths of the distribution gets worse. Rank on potential and never
+on the current-form estimate, and it holds up for a friend group.
 
 **Count or rate?** Rate is fairer — it does not reward whoever played most.
-Count is more fun to say. Rank on the rate, print the count and the index change
-in the row, and shrink the rate toward the ~19% par line for anyone with few
+Count is more fun to say. Rank on the rate, print the count and the change in
+potential in the row, and shrink the rate toward the ~19% par line for anyone with few
 rounds rather than gating them out — see "What the leaderboard has to get
 right".
 
-**Consistency is a stat, not a third board.** Given that average
-`strokes_vs_potential` is ≈ −0.93σ — a fixed multiple of the player's own spread
-— a consistency board and an average-based level board would be the same board
+**Consistency is a stat, not a third board.** Given that the average gap to
+potential is ≈ 0.93σ — a fixed multiple of the player's own spread — a
+consistency board and an average-based level board would be the same board
 twice. Show σ on the player's own page with the
 Tier 3 work, not as a competing ranking.
 
@@ -937,10 +956,11 @@ through an implementation.
   measures do. Test it rather than assume. (`handicap_snapshots` no longer
   exists, so the older question of official-versus-computed is moot: every
   player's figure comes from the same calculation.)
-- **How rounds with a null `index_at_time` feed the beat-rate.** The number has
-  to be derived per round from the rounds preceding it, which is the Tier 2 index
-  calculation applied at a historical point rather than to today. Straightforward
-  but not free, and the backfill makes it the common case rather than an edge one.
+- **Whether a season's beat-rate should use each round's point-in-time potential
+  or one figure for the season.** Point-in-time is what `golf.scoring.trailing`
+  already computes and is the honest default, but it means a player's early-season
+  rounds are judged against a smaller sample than their late-season ones. Worth
+  checking whether that skews a season ranking before shipping one.
 - **Nine-hole rounds.** Stored, but the WHS rule for combining two nines into an
   18-hole differential is not implemented. Until it is they should be excluded
   from both boards, and the exclusion should be visible rather than silent.
@@ -1005,12 +1025,13 @@ rounds discredits the whole thing in week one.
 competition invites inflating your handicap, and golf has a word for it. The
 awkward part is which of our two numbers resists it:
 
-  - The **official WHS index** averages the *best 8 of 20*. Deliberately bad
-    rounds are discarded, so it is quite resistant by construction.
-  - The **current-form index** — this app's headline feature — is a
-    recency-weighted mean. Bad rounds count fully and move it quickly. That
-    responsiveness is the entire point for a solo golfer, and it is precisely
-    what makes it easy to game in a competition.
+  - **Potential**, at the 20th percentile, mostly ignores deliberately bad
+    rounds: padding the top four-fifths of the distribution barely moves it.
+    Resistant, much as an official index is, and for the same reason.
+  - **Current form** — this app's headline feature — is recency-weighted. Bad
+    rounds count fully and move it quickly. That responsiveness is the entire
+    point for a solo golfer, and it is precisely what makes it easy to game in a
+    competition.
 
   So the app's better statistic is its more manipulable one. **The form table
   above sidesteps this entirely** by never using an index: both of its terms are

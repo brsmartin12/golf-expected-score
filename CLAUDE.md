@@ -1,36 +1,40 @@
 # Golf Score Differential App
 
 ## What this project is
-A web app that replaces a personal spreadsheet. A user enters their handicap
-index plus a course's slope and rating, and the app shows the potential score
-for that handicap on that course/tee — so a "bad" score on a hard course can
-be seen for what it actually is: possibly a strong round.
+A web app that replaces a personal spreadsheet. A golfer logs a round — course,
+tee, date, score — and the app tells them what it was actually worth, so a "bad"
+score on a hard course can be seen for what it is: possibly a strong round.
 
 Core formula (USGA / World Handicap System):
-- Score Differential = (Score − Course Rating) × 113 / Slope Rating
-- Potential Score = Handicap Index × (Slope / 113) + Course Rating
+- Score Differential = (Score − Course Rating − PCC) × 113 / Slope Rating
 
-**"Potential", not "expected".** An index averages the best 8 of your last 20
-differentials, so a round matching it is a good round, not a typical one. The
-code says `potential_score` everywhere for this reason — see the module
-docstring in `golf/handicap.py`. The *expected* score — the middle of what
-you actually shoot — is a separate number called **typical**, and it is the one
-that headlines the round card once there is history to compute it from. See
-Tier 2 in `ROADMAP.md`.
+That is the only formula the app needs, and it is worth seeing why: a
+differential is a function of the score, the rating, the slope and the PCC
+**alone**. No handicap enters it. Everything the app shows is a quantile of a
+golfer's own differentials, converted back into a score on the tee they played.
+
+**Two numbers, one calculation.**
+- **typical** = the median of your differentials — what you usually shoot. It
+  headlines the round card.
+- **potential** = the 20th percentile — the round you shoot when you play well.
+
+"Potential", never "expected", for the good round; "typical" for the middle one.
+Getting those two words backwards is the mistake the naming exists to prevent.
+See Tier 2 in `ROADMAP.md`.
 
 The *product name* is a separate matter and is still unchosen. "Golf Expected
 Score" survives as a placeholder in the `<h1>`, the FastAPI title and the repo
 name — deliberately, not as a missed rename. A title is not a claim about the
 math. Leave it until a real name exists.
 
-**But the calculator is not the product.** The USGA already ships that. The
-product is what you can only say once rounds accumulate: a Handicap Index is the
-average of your *best 8 of the last 20* differentials, which makes it a measure
-of **potential**, not expectation — the round you shoot when you play well. Your
-*typical* round runs about 3 strokes worse. The app's job is to show both, to
-estimate how you are playing **right now** (the official index is a deliberately
-slow, trailing number), and to surface consistency and course fit, which the
-index throws away entirely.
+**But the calculator is not the product.** The USGA already ships that, and the
+app no longer has one. The product is what you can only say once rounds
+accumulate. A Handicap Index is the average of your *best 8 of the last 20*
+differentials, so it measures **potential**, not expectation — the round you
+shoot when you play well, with your *typical* round about 3 strokes worse. An
+index shows you only that one number, and only slowly. The app's job is to show
+both, to estimate how you are playing **right now**, and to surface consistency
+and course fit, which an index throws away entirely.
 
 **See `ROADMAP.md`** for the full vision and the feature tiers. Read it before
 proposing product direction — the "why" lives there, this file is the "how."
@@ -82,24 +86,21 @@ understandable steps over large one-shot generations.
    unit tests against known-correct values. No web framework yet. **Done.**
 2. Wrap the functions in a FastAPI app with a couple of REST endpoints.
    Verify via FastAPI's auto-generated /docs page. **Done.**
-3. Minimal single-page React frontend: a form (handicap, slope, rating) that
-   calls the API and displays the result. **Done** — but this screen is
-   *scaffolding*, not the product: it is the calculator `ROADMAP.md` opens by
-   saying should not exist twice. Don't polish it. See Tier 0 in `ROADMAP.md`
-   for what survives from it (`api.js`, the env wiring, the to-par convention)
-   and what gets replaced (the form, once courses and tees are pickable).
+3. Minimal single-page React frontend: a form that calls the API and displays
+   the result. **Done, and since replaced.** It was a handicap-index calculator
+   — the thing `ROADMAP.md` opens by saying should not exist twice — and it went
+   with the index. What survived is what Tier 0 said would: `api.js`, the env
+   wiring, and the to-par display convention.
 4. Add Postgres with SQLAlchemy as the ORM. Tables: `users`, `courses`, `tees`,
-   `rounds`, `handicap_snapshots` — see the schema in `ROADMAP.md`. Being taken
-   **Done** — connection, sessions, models, API wiring (`/courses`, `/rounds`)
-   and Alembic migrations. Two things
+   `rounds` — see the schema in `ROADMAP.md`. **Done** — connection, sessions,
+   models, API wiring (`/courses`, `/rounds`) and Alembic migrations. Two things
    are much cheaper now than later:
    - `tees` is its own table, not a column on `courses`. Slope and rating are
      per-tee.
-   - Each round records the handicap index *in effect when it was played*, but
-     the column is nullable: it is derivable from the surrounding rounds (best 8
-     of the trailing 20), which is what makes hand-backfilling possible. Never
-     recompute history against *today's* index — that silently rewrites every
-     past round and destroys every trend.
+   - `rounds.played_on` is the date the round was **played**, not entered, and
+     that is what makes point-in-time grading possible: every round is judged on
+     the rounds played before it. Never grade history against *today's* numbers
+     — that silently rewrites every past round and destroys every trend.
 5. **Backfill the ~30 rounds of history**, deliberately this early: with no
    backfill the app has zero rounds and can say nothing interesting for a full
    season. This is what makes steps 6–8 useful on day one. The history is in
@@ -108,13 +109,14 @@ understandable steps over large one-shot generations.
    but as seed data for `courses` and `tees`; it is a calculator, not a record
    of scores.
 6. Score-only analytics, as pure functions in `backend/golf/` (test-first, same
-   as step 1): full WHS index calculation (best 8 of 20, safeguards included),
-   index projection ("shoot 84 and you go 12.4 → 12.1"), round percentile,
-   typical-vs-potential, cross-course score translation, pre-round target card.
-7. **Current-form index** — the headline. Recency-weighted estimate of mean and
-   spread over your differentials, presented against the official index
-   ("official 12.4, playing like a 10.8"), plus consistency as a first-class
-   stat and trends reported with honest error bars.
+   as step 1). Typical and potential are **done** — `golf/scoring.py`. Still to
+   come: round percentile ("you shoot this or better 26% of the time"),
+   what-if projection ("shoot 84 and your typical goes 89.2 → 88.9"),
+   cross-course score translation, pre-round target card.
+7. **Current form** — the headline. Recency-weighted estimate of centre and
+   spread over your differentials, shown against the flat 20-round figures
+   ("usually 88, playing like an 85"), plus consistency as a first-class stat
+   and trends reported with honest error bars.
 8. Course fit, done honestly: per-course and per-tee strokes-vs-potential,
    shrunk toward zero with confidence intervals, so "this course suits your
    game" is only claimed when the data supports it — and says "need 4 more
@@ -125,7 +127,7 @@ understandable steps over large one-shot generations.
     own data. Then two group boards — a **form table** ranked on who is playing
     better than their *own* normal right now, and a **season table** ranked on
     the rate of rounds that beat your potential (the *rate*, not the average:
-    average `strokes_vs_potential` is ≈ −0.93σ, a fixed multiple of the player's
+    the average gap to potential is ≈ 0.93σ, a fixed multiple of the player's
     own spread, so ranking on it is ranking on consistency) — and a
     net match calculator (the math for which is already in `handicap.py`). The form
     metric is a pure function over differentials and belongs in `backend/golf/`
@@ -139,15 +141,16 @@ understandable steps over large one-shot generations.
 ROADMAP.md            product vision and feature tiers — the "why"
 backend/
   pyproject.toml      package metadata; `pip install -e ".[dev]"` to set up
-  golf/handicap.py    all calculation logic (framework-free, no I/O)
+  golf/handicap.py    single-round math: differential, course handicap
+  golf/scoring.py     quantiles over a scoring record: typical, potential
   api/main.py         FastAPI routes; api/schemas.py holds the Pydantic models
   db/session.py       SQLAlchemy engine + session factory; reads DATABASE_URL
-  db/models.py        the tables: users, courses, tees, rounds, snapshots
+  db/models.py        the tables: users, courses, tees, rounds
   db/config.py        where DATABASE_URL comes from; no side effects on import
   migrations/         Alembic; `alembic upgrade head` builds the schema
   api/routers/        courses.py and rounds.py, mounted in main.py
   api/deps.py         get_current_user — the seam auth replaces at step 10
-  tests/              handicap, api, db, models, routes_data
+  tests/              handicap, scoring, api, db, models, routes_data
 frontend/             Vite + React, React Router, three tabs
   src/main.jsx        route table
   src/App.jsx         the shell: current route plus bottom navigation
@@ -162,7 +165,9 @@ later and nothing needs moving.
 - Keep the calculation logic backend-only and framework-free — it should be
   importable and testable without spinning up FastAPI. The dependency arrow
   points one way: `api` imports `golf` and `db`; neither imports `api`, and
-  `golf` imports nothing at all.
+  `golf` imports nothing outside itself and the standard library.
+  Within `golf`, `scoring` imports `handicap` and not the reverse — one round
+  is the smaller idea, a scoring record is built out of many of them.
 - **Database tests skip rather than fail** when no database is reachable — see
   `requires_database` in `tests/conftest.py`. A fresh clone can always run
   `pytest` and watch the maths pass without starting Postgres first.
@@ -174,10 +179,10 @@ later and nothing needs moving.
 - **Negative is good, in everything a golfer sees.** A minus sign already means
   "under par", so every stroke-denominated number on a screen uses that
   orientation — the round card, the form table, the season table, anything
-  added later. Analysis primitives may run the other way (`strokes_vs_potential`
-  is higher-is-better) but are never displayed raw; the API exposes a separate
-  display-oriented field instead, as `to_potential` does. See the display
-  convention in `ROADMAP.md`.
+  added later — as `to_typical` and `to_potential` do. An analysis primitive may
+  run the other way where higher-is-better reads more naturally for averaging,
+  but is then never displayed raw: the API exposes a separate display-oriented
+  field beside it. See the display convention in `ROADMAP.md`.
 - **Validate at both altitudes.** Pydantic models reject bad input at the HTTP
   boundary (a clean 422); `golf/` keeps its own `ValueError` guards for
   non-HTTP callers. Import the bounds from `golf.handicap` rather than
@@ -202,9 +207,11 @@ later and nothing needs moving.
   apart here. It cancels in every self-referential comparison and does not cancel
   between people. Stroke-giving needs Adjusted Gross Scores or an agreed official
   index. See `ROADMAP.md`.
-- **Store raw inputs; derive everything else on read.** Differentials, course
-  handicaps and potential scores are computed, never persisted as the source of
-  truth — otherwise a formula fix leaves the database disagreeing with the code.
+- **Store raw inputs; derive everything else on read.** Differentials, typical
+  and potential are computed, never persisted as the source of truth —
+  otherwise a formula fix leaves the database disagreeing with the code. This is
+  also why a round is graded by `_read_models` over the whole series rather than
+  row by row: its verdict depends on the rounds around it, not on itself.
 - Prefer explicit, readable code over clever one-liners; this is a learning
   project.
 - Update this file when a decision changes (e.g. swapping Railway for
