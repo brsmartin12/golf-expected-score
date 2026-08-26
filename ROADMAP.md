@@ -90,13 +90,39 @@ nice-to-have next to the logging screen.
   and the record at this course. Serving that in a single request keeps both
   screens fast and stops the frontend orchestrating three round trips. Worth
   knowing before the models land, since it shapes what they need to make cheap.
-- **Connectivity is a design constraint, not an afterthought.** Both moments
-  happen at a golf course, and plenty of courses have poor signal or none. A
-  post-round entry that fails in the car park does not merely annoy — it loses
-  the round, and the fifteen-second promise with it. Before Tier 1 ships, decide
-  whether entry queues locally and syncs later, or at minimum fails loudly with
-  everything still in the form and nothing silently dropped. Stale reads are
-  tolerable; a lost write is not.
+- **Connectivity is a design constraint, but be precise about which failure.**
+  It is tempting to say "courses have no signal, so entry must work offline" and
+  reach for a local draft. That reasoning does not survive contact: with no
+  signal at all the app never loads, and a draft of a form you never reached
+  saves nothing. Two different problems get conflated, and they have different
+  fixes.
+
+  **Loading the app offline** is a service-worker problem. Cache the bundle and
+  the app opens with no network at all. That is the PWA item in Tier 5, and it
+  is the only thing that addresses "no signal, full stop".
+
+  **Not losing what was typed** is a separate problem that a cached app does not
+  solve — caching the app does not preserve the form. Three cases make it real,
+  and only one of them is about a golf course:
+
+  1. *The backfill.* Thirty rounds entered at a desk in one sitting. An API
+     hiccup at round 22 loses that entry and the user's place in the sequence.
+     No signal problem involved at all, and this is the case most likely to make
+     someone abandon the task half-finished.
+  2. *The frontend and the API are different hosts.* The bundle is served from a
+     CDN, the API from Railway or Render. They fail independently — a deploy, a
+     cold start, a 502 — so the page loading says nothing about whether the API
+     is reachable.
+  3. *Signal that was there and then was not.* The realistic car-park failure is
+     not "no network", it is a connection good enough to load the app and gone
+     by the time the round is typed thirty seconds later.
+
+  So: a local draft of the in-progress entry, cleared on a successful save and
+  offered back on load, plus failing loudly with everything preserved rather
+  than silently dropping a write. It is roughly ten lines and it is a hedge, not
+  an offline story. The two stack — the service worker gets the app open, the
+  draft keeps the typing — and neither substitutes for the other. Stale reads
+  are tolerable; a lost write is not.
 - **Sequencing.** The before-round card only gets interesting once rounds are
   stored — "typical here" and "your record here" need history — so it lands in
   Tier 2. Its *shape* is worth planning now, because it decides what the Tier 1
