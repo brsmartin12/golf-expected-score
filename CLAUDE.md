@@ -191,6 +191,17 @@ later and nothing needs moving.
   After changing a model, run `alembic revision --autogenerate -m "..."`, read
   what it wrote, and commit it with the model change. `tests/test_migrations.py`
   fails if the two ever disagree.
+- **The app computes no handicap index, and nothing may be labelled one.**
+  Potential is the 20th percentile of your own Score Differentials, typical the
+  median — one calculation, two quantiles, and a Score Differential needs no
+  index. That way "how is this worked out?" has a one-sentence answer instead of
+  looking like the handicap formula with pieces missing.
+- **The app's figures never allocate strokes between players.** We take gross
+  scores; GHIN caps each hole at net double bogey, and that bias scales with how
+  often a player blows up — two golfers GHIN rates 0.24 apart can come out 2.4
+  apart here. It cancels in every self-referential comparison and does not cancel
+  between people. Stroke-giving needs Adjusted Gross Scores or an agreed official
+  index. See `ROADMAP.md`.
 - **Store raw inputs; derive everything else on read.** Differentials, course
   handicaps and potential scores are computed, never persisted as the source of
   truth — otherwise a formula fix leaves the database disagreeing with the code.

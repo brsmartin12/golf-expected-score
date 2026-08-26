@@ -288,6 +288,136 @@ Notes on the shape:
   data we have deliberately chosen not to collect. Fine for personal tracking — worth
   stating plainly rather than pretending the number is official.
 
+## The app's index will not match GHIN, and should not try
+
+**Decision: compute our own number, name it as ours, and show the official one
+beside it when it is known.** Do not chase agreement with GHIN.
+
+### Why agreement is not reachable
+
+The largest gap is **Adjusted Gross Score**. GHIN caps every hole at net double
+bogey — par + 2 + strokes received on that hole — before computing a
+differential. This app takes the gross score, because it deliberately does not
+collect hole scores, and net double bogey cannot be applied without them.
+
+Simulated over 20,000 rounds per player:
+
+| Player      | Gross | Adjusted | Lost to the cap | Rounds affected |
+| ----------- | ----- | -------- | --------------- | --------------- |
+| 5 handicap  | 86.0  | 84.9     | 1.12            | 52%             |
+| 10 handicap | 92.4  | 91.0     | 1.42            | 61%             |
+| 18 handicap | 101.0 | 99.7     | 1.34            | 55%             |
+
+A stroke of gross score is 113/slope of a differential, so on a slope-130 course
+each stroke lost to the cap is about 0.87 of a differential point — and an index
+averages eight of them, so the bias carries through roughly 1:1. **Our figure
+runs about 1 to 1.5 strokes worse than GHIN on identical rounds**, systematically
+and always in the same direction.
+
+Smaller sources on top of that: rounds posted to one and not the other, PCC
+(usually 0 but not always), the low-index safeguards and exceptional-score
+reduction, and nine-hole combining.
+
+### Why it matters far less than it looks
+
+**GHIN does not use a longer period either.** The WHS index is the best 8 of the
+**last 20** differentials — 2019's rounds are not in it. So the populations can
+converge, and after a 30-round backfill they largely have. "Their GHIN was built
+over years" is true of the account, not of the calculation.
+
+**Every headline number in this app is an internal comparison, so a consistent
+bias cancels:**
+
+- *typical vs potential* — both computed from the same differentials
+- *form delta* — recent against the player's own baseline; no index appears at all
+- *course fit* — per-course against the same player's overall; biased on both sides
+- *round percentile* — a rank within the player's own rounds
+
+The bias corrupts exactly one thing: a number labelled "handicap" sitting next
+to a different number in the GHIN app. That is a naming problem, not a maths
+problem — the same lesson as renaming "expected" to "potential".
+
+### What follows: stop computing an index at all
+
+Naming the figure carefully is not enough on its own. If the app computes
+best-8-of-20 and calls it something else, the first person to ask "so how is
+this worked out?" gets an answer that is recognisably the handicap formula with
+pieces missing — which reads as a half-finished implementation rather than a
+deliberate different measure.
+
+So the app does not compute an index. **Potential is a percentile of the
+golfer's own Score Differentials**, exactly as typical is their median:
+
+```
+typical differential   = median (50th percentile) of the last 20
+potential differential = 20th percentile of the last 20
+score on this tee      = differential x (slope / 113) + course rating
+```
+
+That last line is the same arithmetic the old index-based `potential_score` used
+— an index was only ever an average of differentials wearing a different name.
+What changes is where the number comes from, and what it can be asked about.
+
+The whole question becomes answerable in one sentence with no asterisk:
+*typical is the median of your last 20 rounds, potential is your 20th
+percentile.* There is no cap to be missing and no safeguard to be absent,
+because nothing is attempting to be a handicap.
+
+Numerically it stays close to what an index would have given — the 20th
+percentile runs about 0.3 strokes above best-8-of-20 for a steady player and 0.9
+for a very streaky one — so the figure a golfer sees does not lurch.
+
+Three things follow:
+
+1. **A Score Differential needs no index**, which is what makes this possible at
+   all: `score_differential(score, course_rating, slope_rating, pcc)`. Two
+   golfers of wildly different ability who shoot the same score from the same
+   tee get the same differential. The dependency runs rounds -> differentials ->
+   quantiles, and stops there.
+2. **`handicap_snapshots` is dropped.** Nothing reads it, and a figure entered
+   once and never updated is confidently wrong within weeks — worse than showing
+   nothing. If a golfer with no history ever needs a starting point, that is one
+   nullable column on `users`, added when something actually needs it.
+3. **`rounds.index_at_time` is dropped** for the same reason: with potential
+   derived from the surrounding rounds, it is a breadcrumb pointing at a
+   calculation the app no longer performs.
+
+### The one thing this does NOT fix
+
+**The app's figures still cannot allocate strokes between players.** The
+percentile framing removes the credibility problem; it does nothing about the
+fairness one, because the bias comes from gross scores containing blow-ups, not
+from the best-8 formula.
+
+Simulated with two players of genuinely equal ability — same mean score, one
+steady and one streaky:
+
+| Player  | Our figure | GHIN-style |
+| ------- | ---------- | ---------- |
+| steady  | 15.8       | 15.2       |
+| streaky | 18.4       | 15.4       |
+
+GHIN rates them 0.24 strokes apart. We rate them 2.4 apart. In a match the
+streaky player would collect **over two strokes they have not earned** — which is
+precisely the abuse the net double bogey cap exists to prevent, reintroduced.
+
+So the rule is about **use**, not naming: *the app's own figures never allocate
+strokes between players.* Everything self-referential — typical, potential, form
+delta, course fit, percentile — is fine, because the same bias sits on both
+sides of the comparison. Anything giving one golfer strokes against another
+needs either Adjusted Gross Scores entered by everyone, or an official index the
+group agrees on. `course_handicap` and `playing_handicap` stay in `handicap.py`
+for that day, unused by the core loop until then.
+
+**Worth testing when it is built:** the season table's beat-rate compares players
+and derives from each one's own potential. Whether the blow-up bias contaminates
+it is not obvious either way.
+
+Worth noting this is not a shortcoming peculiar to this app: every golf app that
+is not the handicap authority computes an unofficial figure and has exactly this
+gap. The difference available to us is being explicit about it rather than
+showing a number and hoping nobody cross-checks.
+
 ## Tier 2 — Analytics that need only a score column
 
 All of these are pure functions living beside `handicap.py` in `backend/golf/`, with
@@ -801,12 +931,12 @@ through an implementation.
 - **When a season starts.** Calendar year is the obvious default; a northern
   golf season running roughly April to October is arguably truer and makes the
   winter reset feel natural rather than arbitrary. Undecided.
-- **Which index the season table counts against.** The official figure from
-  `handicap_snapshots` is the right answer where it exists, but most members
-  will not have entered one, and mixing official indexes for some players with
-  app-computed ones for others makes the ranking incomparable. Probably: use the
-  app's own best-8 figure for everyone, so the board is at least internally
-  consistent, and show the official index separately as information.
+- **Whether the season table's beat-rate is contaminated by the blow-up bias.**
+  It compares players, and each player's potential carries a bias that scales
+  with how often they blow up, so it may not cancel the way the self-referential
+  measures do. Test it rather than assume. (`handicap_snapshots` no longer
+  exists, so the older question of official-versus-computed is moot: every
+  player's figure comes from the same calculation.)
 - **How rounds with a null `index_at_time` feed the beat-rate.** The number has
   to be derived per round from the rounds preceding it, which is the Tier 2 index
   calculation applied at a historical point rather than to today. Straightforward
