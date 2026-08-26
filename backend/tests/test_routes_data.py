@@ -39,6 +39,12 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
+# A slope-113 course rated at exactly 72.0, which makes every expected value
+# below checkable in your head: on a standard-slope tee the differential formula
+# collapses to (score - course rating), so a 76 rates 4.0 and nothing else.
+FLAT_TEE = [{"name": "Blue", "par": 72, "course_rating": 72.0, "slope_rating": 113}]
+
+
 def add_course(client, name="Pine Hills", tees=None):
     payload = {
         "name": name,
@@ -124,44 +130,137 @@ def test_a_tee_with_an_illegal_slope_is_rejected(client):
 # ---------------------------------------------------------------------------
 
 
-def test_logging_a_round_returns_the_verdict_in_the_same_response(client):
-    """The post-round moment is one request, not a save followed by a fetch."""
-    tee = add_course(client)["tees"][0]
-
+def log(client, tee_id, played_on, gross_score, **extra):
     response = client.post(
         "/rounds",
         json={
-            "tee_id": tee["id"],
-            "played_on": "2025-06-14",
-            "gross_score": 88,
-            "index_at_time": 10.0,
+            "tee_id": tee_id,
+            "played_on": played_on,
+            "gross_score": gross_score,
+            **extra,
         },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def log_a_history(client, tee_id, scores=range(73, 81)):
+    """Eight rounds on the flat tee, one per day from 2025-01-01.
+
+    Scores 73..80 on a 72.0/113 tee give differentials 1.0..8.0, whose
+    quantiles are worked out by hand as:
+
+        median (typical)        position 0.5 x 7 = 3.5 -> 4 + 0.5 = 4.5
+        20th percentile (potential)  position 0.2 x 7 = 1.4 -> 2 + 0.4 = 2.4
+
+    Back on this tee that is a typical of 76.5 and a potential of 74.4.
+    """
+    for day, score in enumerate(scores, start=1):
+        log(client, tee_id, f"2025-01-{day:02d}", score)
+
+
+TYPICAL_AFTER_EIGHT = 76.5
+POTENTIAL_AFTER_EIGHT = 74.4
+
+
+def test_the_first_round_has_a_differential_but_no_benchmarks(client):
+    """Nothing to compare it to yet, so the app says so instead of guessing."""
+    tee = add_course(client, tees=FLAT_TEE)["tees"][0]
+
+    body = log(client, tee["id"], "2025-06-14", 88)
+
+    assert body["score_differential"] == 16.0  # 88 - 72.0, slope 113
+    assert body["rounds_of_history"] == 0
+    assert body["rounds_until_benchmarks"] == 8
+    assert body["typical_score"] is None
+    assert body["potential_score"] is None
+    assert body["to_typical"] is None
+    assert body["to_potential"] is None
+
+
+def test_logging_a_round_returns_the_verdict_in_the_same_response(client):
+    """The post-round moment is one request, not a save followed by a fetch."""
+    tee = add_course(client, tees=FLAT_TEE)["tees"][0]
+    log_a_history(client, tee["id"])
+
+    response = client.post(
+        "/rounds",
+        json={"tee_id": tee["id"], "played_on": "2025-02-01", "gross_score": 80},
     )
 
     assert response.status_code == 201
     body = response.json()
-    assert body["score_differential"] == 14.3
-    assert body["potential_score"] == 83.0
-    assert body["strokes_vs_potential"] == -5.0
-    assert body["to_potential"] == 5.0  # over, and over is worse
+    assert body["rounds_of_history"] == 8
+    assert body["rounds_until_benchmarks"] == 0
+    assert body["typical_score"] == TYPICAL_AFTER_EIGHT
+    assert body["potential_score"] == POTENTIAL_AFTER_EIGHT
+    assert body["to_typical"] == 3.5  # 80 - 76.5, over and over is worse
+    assert body["to_potential"] == 5.6  # 80 - 74.4
     assert body["course_name"] == "Pine Hills"
     assert body["tee_name"] == "Blue"
 
 
-def test_a_round_without_an_index_still_gets_a_differential(client):
-    """The backfill case. The differential needs no index; the rest does."""
-    tee = add_course(client)["tees"][0]
+def test_beating_your_typical_reads_as_a_negative_number(client):
+    """The display convention: a minus sign means better, everywhere a golfer
+    can see it. See ROADMAP.md."""
+    tee = add_course(client, tees=FLAT_TEE)["tees"][0]
+    log_a_history(client, tee["id"])
 
-    body = client.post(
-        "/rounds",
-        json={"tee_id": tee["id"], "played_on": "2023-04-02", "gross_score": 88},
-    ).json()
+    body = log(client, tee["id"], "2025-02-01", 74)
 
-    assert body["score_differential"] == 14.3
-    assert body["index_at_time"] is None
-    assert body["potential_score"] is None
-    assert body["strokes_vs_potential"] is None
-    assert body["to_potential"] is None
+    assert body["to_typical"] == -2.5  # 74 - 76.5
+    assert body["to_potential"] == -0.4  # 74 - 74.4, better than his own best form
+
+
+def test_a_round_is_graded_on_the_rounds_before_it_and_never_on_later_ones(client):
+    """Point-in-time correctness, which is what keeps a trend meaningful.
+
+    Grading the whole history against today's numbers would rewrite every past
+    round each time a score is logged.
+    """
+    tee = add_course(client, tees=FLAT_TEE)["tees"][0]
+    log_a_history(client, tee["id"])
+    graded = log(client, tee["id"], "2025-02-01", 80)
+
+    # A run of much better golf afterwards must not touch that verdict.
+    for day in range(2, 8):
+        log(client, tee["id"], f"2025-02-{day:02d}", 68)
+
+    unchanged = next(r for r in client.get("/rounds").json() if r["id"] == graded["id"])
+    assert unchanged["typical_score"] == TYPICAL_AFTER_EIGHT
+    assert unchanged["to_typical"] == 3.5
+
+
+def test_a_backfilled_round_is_graded_on_its_own_date(client):
+    """A round entered last but played first has no history behind it, and it
+    becomes history for everything that follows."""
+    tee = add_course(client, tees=FLAT_TEE)["tees"][0]
+    log_a_history(client, tee["id"])
+    later = log(client, tee["id"], "2025-02-01", 80)
+
+    backfilled = log(client, tee["id"], "2024-05-05", 85)
+
+    assert backfilled["rounds_of_history"] == 0
+    regraded = next(r for r in client.get("/rounds").json() if r["id"] == later["id"])
+    assert regraded["rounds_of_history"] == 9
+
+
+def test_nine_hole_rounds_are_kept_out_of_the_benchmarks(client):
+    """Half a round through an 18-hole rating produces a differential several
+    strokes too low, which would drag both figures down for twenty rounds."""
+    tee = add_course(client, tees=FLAT_TEE)["tees"][0]
+    log_a_history(client, tee["id"])
+
+    nine = log(client, tee["id"], "2025-02-01", 41, is_nine_hole=True)
+    assert nine["typical_score"] is None
+    assert nine["rounds_of_history"] == 0
+    # No countdown: no number of further rounds gets a nine a verdict, so
+    # promising one would be a lie the screen would repeat forever.
+    assert nine["rounds_until_benchmarks"] == 0
+
+    after = log(client, tee["id"], "2025-02-02", 80)
+    assert after["rounds_of_history"] == 8  # the nine did not count
+    assert after["typical_score"] == TYPICAL_AFTER_EIGHT
 
 
 def test_pcc_reaches_the_differential(client):

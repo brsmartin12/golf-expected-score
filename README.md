@@ -1,27 +1,33 @@
 # Golf Expected Score
 
-Enter a handicap index plus a course's slope and rating, and see the potential
-score for that handicap on that tee — so a "bad" score on a hard course can be
-seen for what it actually is.
+Log a round — course, tee, date, score — and see what it was actually worth, so
+a "bad" score on a hard course can be seen for what it is.
 
-The calculator is the starting point, not the goal — the USGA already has one of
-those. The aim is what only your *history* can tell you: a Handicap Index is the
-average of your best 8 of the last 20 rounds, so it measures your **potential**,
-not your typical score. This app is being built to show both, to estimate how
-you're playing *right now* rather than 20 rounds ago, and to find the courses
-that suit your game. See **[ROADMAP.md](ROADMAP.md)**.
+The point is what only your *history* can tell you. Two numbers, both quantiles
+of your own Score Differentials:
+
+- **typical** — the median. What you usually shoot here.
+- **potential** — the 20th percentile. What you shoot when you play well.
+
+A Handicap Index gives you only the second one, and only slowly. It is also not
+what this app computes: our figures come from gross scores, where the World
+Handicap System caps each hole at net double bogey, so calling ours an index
+would be claiming a precision it does not have. A percentile has nothing missing
+from it — "the median of your last 20 rounds" is the whole answer to how it
+works. See **[ROADMAP.md](ROADMAP.md)**.
 
 Partway through **step 5**: the calculation core, a FastAPI wrapper, a migrated
-database, and a three-tab React app whose rounds list reads from it. The
-round-entry screen itself is next.
+database, and a three-tab React app that logs rounds and grades them.
 
 ## Layout
 
 ```
 ROADMAP.md              where this is going, and why
 backend/
-  golf/handicap.py      all the math (framework-free, no I/O)
-  api/main.py           HTTP routes over that math
+  golf/handicap.py      single-round math (framework-free, no I/O)
+  golf/scoring.py       typical and potential, over a list of differentials
+  api/main.py           the app object, health checks, error handling
+  api/routers/          the routes that do the work — courses, rounds
   api/schemas.py        request/response models
   tests/
 frontend/
@@ -120,21 +126,27 @@ from the type hints where you can fire real requests at the endpoints.
 | ------ | ----------------- | ------------------------------------------------------------- |
 | GET    | `/health`         | Liveness check — deliberately does not touch the database      |
 | GET    | `/health/db`      | Readiness check — can the app reach Postgres?                  |
-| POST   | `/potential-score` | Index + slope + rating → potential score, course handicap      |
-| POST   | `/round`          | A played score → potential, strokes vs. potential, differential |
 | GET    | `/courses`        | Courses with their tees — what a course picker renders          |
 | POST   | `/courses`        | Add a course and its tees together                              |
 | GET    | `/rounds`         | Your rounds, most recently *played* first                       |
 | POST   | `/rounds`         | Log a round and get the verdict in the same response            |
 
-```bash
-curl -X POST http://127.0.0.1:8000/round \
-  -H 'Content-Type: application/json' \
-  -d '{"score": 88, "handicap_index": 10.0, "slope_rating": 130, "course_rating": 71.5}'
+There is deliberately no calculator endpoint. Every number the app shows comes
+from a golfer's own rounds, so it hangs off `/rounds`:
 
-# {"score":88.0,"potential_score":83.0,"strokes_vs_potential":-5.0,
-#  "score_differential":14.3,"beat_expectation":false}
+```bash
+curl -X POST http://127.0.0.1:8000/rounds \
+  -H 'Content-Type: application/json' \
+  -d '{"tee_id": 1, "played_on": "2025-06-14", "gross_score": 80}'
+
+# {"gross_score":80,"score_differential":8.0,"rounds_of_history":8,
+#  "typical_score":76.5,"potential_score":74.4,
+#  "to_typical":3.5,"to_potential":5.6, ...}
 ```
+
+`to_typical` and `to_potential` read the way a scorecard does: negative is
+better. Both are null until there are eight earlier rounds to draw on, and
+`rounds_until_benchmarks` counts down to that.
 
 ## Running the frontend
 
@@ -147,8 +159,8 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:5173>. Enter a handicap index, slope and course rating to
-see what you shoot here when you play well; add a score to grade a round you played.
+Open <http://localhost:5173>. Add a course with its tees, then log a round — it
+comes back graded in the same response.
 
 The backend URL defaults to `http://127.0.0.1:8000`. To point somewhere else,
 copy `.env.example` to `.env` and set `VITE_API_URL` — that's the hook step 9
@@ -157,11 +169,24 @@ uses to aim the deployed frontend at the deployed backend.
 ## Using the math directly
 
 ```python
-from golf import potential_score, score_differential, strokes_vs_potential
+from golf import (
+    potential_differential,
+    score_differential,
+    score_from_differential,
+    typical_differential,
+)
 
-potential_score(10.0, 130, 71.5)        # 83.0  -- what a 10.0 index should shoot
-score_differential(88, 71.5, 130)      # 14.3  -- how that round rates
-strokes_vs_potential(88, 10.0, 130, 71.5)   # -5.0 -- five worse than potential
+# One round: how it rates, on a scale that is the same everywhere.
+score_differential(88, 71.5, 130)          # 14.3
+
+# A scoring record: the two quantiles, oldest round first.
+history = [14.3, 11.0, 16.2, 12.8, 15.1, 13.4, 18.0, 12.1]
+typical_differential(history)              # 13.9  -- the median
+potential_differential(history)            # 12.4  -- the 20th percentile
+
+# Back into strokes on the tee you are standing on.
+score_from_differential(13.9, 71.5, 130)   # 87.5
 ```
 
-`strokes_vs_potential` is positive when you beat your expectation.
+Both quantiles return `None` below eight rounds rather than a number nobody
+should trust.

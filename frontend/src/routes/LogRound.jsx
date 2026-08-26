@@ -145,27 +145,6 @@ export default function LogRound() {
             </label>
           </div>
 
-          <label className="field">
-            <span className="field__label">
-              Handicap index <span className="field__optional">optional</span>
-            </span>
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.1"
-              min="-10"
-              max="54"
-              placeholder="10.0"
-              value={form.handicapIndex}
-              onChange={(event) => setField("handicapIndex", event.target.value)}
-            />
-            <span className="field__hint">
-              Your index on the day, cleared after each save. Leave it blank
-              for old rounds — it can be worked out from the rounds around it
-              later.
-            </span>
-          </label>
-
           {error && <p className="notice notice--bad" role="alert">{error}</p>}
 
           <button className="button" type="submit" disabled={!isReady || isSaving}>

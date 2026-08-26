@@ -87,30 +87,6 @@ async function postJson(path, body) {
   return response.json();
 }
 
-/** The score this Handicap Index posts on this tee when it plays well. */
-export function fetchPotentialScore({ handicapIndex, slopeRating, courseRating }) {
-  return postJson("/potential-score", {
-    handicap_index: handicapIndex,
-    slope_rating: slopeRating,
-    course_rating: courseRating,
-  });
-}
-
-/** Grade a round that was actually played against that potential. */
-export function fetchRoundVerdict({
-  score,
-  handicapIndex,
-  slopeRating,
-  courseRating,
-}) {
-  return postJson("/round", {
-    score,
-    handicap_index: handicapIndex,
-    slope_rating: slopeRating,
-    course_rating: courseRating,
-  });
-}
-
 /** Every round this golfer has logged, most recently played first. */
 export function fetchRounds() {
   return getJson("/rounds");
@@ -142,13 +118,10 @@ export function createCourse({ name, city, state, tee }) {
  * Log a round. The response carries the verdict, so this is one request rather
  * than a save followed by a fetch — see the note on POST /rounds in the backend.
  */
-export function createRound({ teeId, playedOn, grossScore, handicapIndex }) {
+export function createRound({ teeId, playedOn, grossScore }) {
   return postJson("/rounds", {
     tee_id: teeId,
     played_on: playedOn,
     gross_score: grossScore,
-    // Omitted rather than null-ed when unknown, which is the backfill case:
-    // the index is derivable from the surrounding rounds later.
-    ...(handicapIndex === null ? {} : { index_at_time: handicapIndex }),
   });
 }
