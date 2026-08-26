@@ -178,8 +178,16 @@ class RoundRead(BaseModel):
         ...,
         description=(
             "How many earlier rounds the two benchmarks were drawn from, capped "
-            "at the 20-round window. Below the minimum the benchmarks are null "
-            "and the screen shows a countdown instead of a number."
+            "at the 20-round window."
+        ),
+    )
+    rounds_until_benchmarks: int = Field(
+        ...,
+        description=(
+            "How many more rounds are needed before this one could have been "
+            "graded; 0 once it has been. Sent so the screen can show an honest "
+            "countdown without hard-coding the minimum, which lives in "
+            "golf/scoring.py."
         ),
     )
 

@@ -95,8 +95,9 @@ export default function Rounds() {
           </svg>
           <p className="empty__title">No rounds yet</p>
           <p className="empty__body">
-            Log one and it shows up here. Around 20 rounds is where your typical
-            score becomes worth trusting.
+            Log one and it shows up here. After eight, rounds start being
+            graded against what you typically shoot; around twenty is where
+            that number becomes worth trusting.
           </p>
         </div>
       )}
@@ -105,7 +106,9 @@ export default function Rounds() {
         <ul className="rounds">
           {rounds.map((round) => {
             const { day, month } = formatPlayedOn(round.played_on);
-            const gap = toPar(round.to_potential);
+            // Against TYPICAL, matching the verdict card. A round is judged
+            // on what this golfer usually shoots, not on their best form.
+            const gap = toPar(round.to_typical);
 
             return (
               <li key={round.id} className="round">
@@ -128,7 +131,9 @@ export default function Rounds() {
                       {gap.text}
                     </span>
                   ) : (
-                    <span className="round__gap round__gap--none">no index</span>
+                    <span className="round__gap round__gap--none">
+                      {round.is_nine_hole ? "9 holes" : "no history"}
+                    </span>
                   )}
                 </div>
               </li>

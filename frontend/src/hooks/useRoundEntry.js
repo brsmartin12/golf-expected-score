@@ -13,7 +13,7 @@
  *   Quick-add. After a save the course, tee and date stay and only the score
  *   clears, because consecutive backfilled rounds are usually at the same
  *   course and near each other in time. Thirty rounds becomes three keystrokes
- *   each instead of four fields each.
+ *   each instead of three fields each.
  *
  *   The draft. The in-progress entry is mirrored to localStorage so a failed
  *   save never loses what was typed. This is a hedge, not an offline story —
@@ -38,7 +38,7 @@ export function todayIso() {
   return local.toISOString().slice(0, 10);
 }
 
-const EMPTY = { teeId: "", playedOn: todayIso(), grossScore: "", handicapIndex: "" };
+const EMPTY = { teeId: "", playedOn: todayIso(), grossScore: "" };
 
 function readDraft() {
   try {
@@ -86,8 +86,6 @@ export function useRoundEntry() {
         teeId: Number(form.teeId),
         playedOn: form.playedOn,
         grossScore: Number(form.grossScore),
-        handicapIndex:
-          form.handicapIndex.trim() === "" ? null : Number(form.handicapIndex),
       });
 
       setVerdict(round);
@@ -95,14 +93,11 @@ export function useRoundEntry() {
 
       // Quick-add: keep the CONTEXT, clear what belongs to the round.
       //
-      // Course, tee and date persist because consecutive entries share them.
-      // The index deliberately does NOT, even though it is stable week to week:
-      // left sticky, a backfill would stamp thirty rounds spanning three years
-      // with whatever index was typed once at the start. That is silently wrong
-      // history — the exact failure `index_at_time` was made nullable to avoid.
-      // Retyping an index occasionally is a much smaller cost than fabricating
-      // one for every round.
-      setForm((previous) => ({ ...previous, grossScore: "", handicapIndex: "" }));
+      // Course, tee and date persist because consecutive entries share them;
+      // the score is the only thing that is different every time. A round is
+      // three fields now — there is nothing else here that could be typed once
+      // and wrongly stamped across a whole backfill.
+      setForm((previous) => ({ ...previous, grossScore: "" }));
       return true;
     } catch (saveError) {
       // Deliberately does NOT clear the form. A failed save that also wipes

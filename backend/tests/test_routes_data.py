@@ -171,6 +171,7 @@ def test_the_first_round_has_a_differential_but_no_benchmarks(client):
 
     assert body["score_differential"] == 16.0  # 88 - 72.0, slope 113
     assert body["rounds_of_history"] == 0
+    assert body["rounds_until_benchmarks"] == 8
     assert body["typical_score"] is None
     assert body["potential_score"] is None
     assert body["to_typical"] is None
@@ -190,6 +191,7 @@ def test_logging_a_round_returns_the_verdict_in_the_same_response(client):
     assert response.status_code == 201
     body = response.json()
     assert body["rounds_of_history"] == 8
+    assert body["rounds_until_benchmarks"] == 0
     assert body["typical_score"] == TYPICAL_AFTER_EIGHT
     assert body["potential_score"] == POTENTIAL_AFTER_EIGHT
     assert body["to_typical"] == 3.5  # 80 - 76.5, over and over is worse
@@ -252,6 +254,9 @@ def test_nine_hole_rounds_are_kept_out_of_the_benchmarks(client):
     nine = log(client, tee["id"], "2025-02-01", 41, is_nine_hole=True)
     assert nine["typical_score"] is None
     assert nine["rounds_of_history"] == 0
+    # No countdown: no number of further rounds gets a nine a verdict, so
+    # promising one would be a lie the screen would repeat forever.
+    assert nine["rounds_until_benchmarks"] == 0
 
     after = log(client, tee["id"], "2025-02-02", 80)
     assert after["rounds_of_history"] == 8  # the nine did not count

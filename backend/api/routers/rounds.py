@@ -24,6 +24,7 @@ from api.deps import get_current_user
 from api.schemas import RoundCreate, RoundRead
 from db import Round, Tee, User, get_session
 from golf import (
+    MINIMUM_ROUNDS,
     POTENTIAL_QUANTILE,
     TYPICAL_QUANTILE,
     WINDOW,
@@ -76,15 +77,26 @@ def _read_models(rounds: list[Round]) -> list[RoundRead]:
     models = []
     for i, round_ in enumerate(rounds):
         n = position.get(i)
-        history = 0 if n is None else min(n, WINDOW)
-        typical_differential = None if n is None else typical_at[n]
-        potential_differential = None if n is None else potential_at[n]
+
+        if n is None:  # a nine-hole round: outside the population entirely
+            history = 0
+            # Not `MINIMUM_ROUNDS`: no number of further rounds will ever get
+            # this one a verdict, so a countdown here would be a promise the app
+            # cannot keep. The screen branches on is_nine_hole instead.
+            countdown = 0
+            typical_differential = potential_differential = None
+        else:
+            history = min(n, WINDOW)
+            countdown = max(0, MINIMUM_ROUNDS - history)
+            typical_differential = typical_at[n]
+            potential_differential = potential_at[n]
 
         models.append(
             _one(
                 round_,
                 differentials[i],
                 history,
+                countdown,
                 typical_differential,
                 potential_differential,
             )
@@ -96,6 +108,7 @@ def _one(
     round_: Round,
     differential: float,
     rounds_of_history: int,
+    rounds_until_benchmarks: int,
     typical_differential: float | None,
     potential_differential: float | None,
 ) -> RoundRead:
@@ -134,6 +147,7 @@ def _one(
         notes=round_.notes,
         score_differential=differential,
         rounds_of_history=rounds_of_history,
+        rounds_until_benchmarks=rounds_until_benchmarks,
         typical_score=typical,
         potential_score=potential,
         to_typical=gap(typical),
