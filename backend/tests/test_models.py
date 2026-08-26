@@ -16,8 +16,8 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from db.models import Course, HandicapSnapshot, Round, Tee, User
-from golf import potential_score, score_differential
+from db.models import Course, Round, Tee, User
+from golf import score_differential, score_from_differential
 from tests.conftest import requires_database
 
 pytestmark = requires_database
@@ -99,17 +99,15 @@ def test_defaults_are_applied(db_session):
     assert stored.created_at is not None  # the row's birthday, not the round's
 
 
-def test_index_at_time_is_optional(db_session):
-    """The column that makes hand-backfilling possible: nobody remembers their
-    index from two years ago, and it is derivable from the surrounding rounds."""
-    user = make_user(db_session)
-    tee = make_tee(db_session, make_course(db_session))
-    db_session.add(
-        Round(user=user, tee=tee, played_on=date(2023, 4, 2), gross_score=91)
-    )
-    db_session.flush()
+def test_a_round_stores_no_handicap_index(db_session):
+    """Regression guard on a deliberate removal.
 
-    assert db_session.scalars(select(Round)).one().index_at_time is None
+    `rounds` used to carry an `index_at_time` column so that past rounds were
+    never regraded against today's number. played_on does that job now -- the
+    API grades each round on the rounds played before it -- and the column went
+    with the rest of the index machinery. This test fails if it comes back.
+    """
+    assert "index_at_time" not in Round.__table__.columns
 
 
 def test_course_rating_keeps_its_exact_decimal(db_session):
@@ -156,7 +154,10 @@ def test_stored_values_feed_the_golf_maths(db_session):
     """float() at the boundary is the whole cost of storing ratings as Numeric."""
     tee = make_tee(db_session, make_course(db_session), cr="71.5", slope=130)
 
-    assert potential_score(10.0, tee.slope_rating, float(tee.course_rating)) == 83.0
+    # 14.3 x 130/113 + 71.5 = 87.951 -> 88.0
+    assert (
+        score_from_differential(14.3, float(tee.course_rating), tee.slope_rating) == 88.0
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -233,19 +234,6 @@ def test_two_courses_may_share_a_name_in_different_cities(db_session):
 def test_the_same_email_cannot_register_twice(db_session):
     make_user(db_session, email="dup@example.com")
     db_session.add(User(email="dup@example.com", display_name="Impostor"))
-
-    with pytest.raises(IntegrityError):
-        db_session.flush()
-
-
-def test_one_index_per_user_per_date(db_session):
-    user = make_user(db_session)
-    for _ in range(2):
-        db_session.add(
-            HandicapSnapshot(
-                user=user, effective_on=date(2025, 6, 1), index_value=Decimal("12.4")
-            )
-        )
 
     with pytest.raises(IntegrityError):
         db_session.flush()

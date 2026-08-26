@@ -23,9 +23,17 @@ Two conventions worth stating once
 
 What is deliberately NOT here
 -----------------------------
-No differentials, no course handicaps, no potential scores. Those are derived on
-read by `golf/handicap.py`. Persisting them would mean a formula fix leaves the
-database quietly disagreeing with the code -- see the convention in CLAUDE.md.
+No differentials, no typical scores, no potential scores. Those are derived on
+read by `golf/`. Persisting them would mean a formula fix leaves the database
+quietly disagreeing with the code -- see the convention in CLAUDE.md.
+
+No handicap index either, in any form. There was a `handicap_snapshots` table
+and a `rounds.index_at_time` column, and both were dropped when the app stopped
+computing an index -- typical and potential are quantiles of a golfer's own
+differentials, and a differential needs no index. A stored index that nothing
+reads is a field on the entry form, four extra keystrokes per round, and a
+standing invitation to treat these figures as a handicap. See the module
+docstring in `golf/handicap.py`.
 """
 
 from datetime import date, datetime
@@ -68,9 +76,6 @@ class User(Base):
     )
 
     rounds: Mapped[list["Round"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-    handicap_snapshots: Mapped[list["HandicapSnapshot"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -170,16 +175,14 @@ class Round(Base):
     played_on: Mapped[date] = mapped_column(Date)
     gross_score: Mapped[int] = mapped_column(Integer)
 
-    # The Handicap Index in effect on the day, and nullable on purpose.
-    #
-    # Historical strokes-vs-potential must never be recomputed against *today's*
-    # index -- that silently rewrites every past round and destroys every trend.
-    # But nobody remembers their index from a Saturday two years ago, which would
-    # make hand-backfilling impossible if this were required. It does not have to
-    # be remembered: once rounds are stored with dates, the index at any date is
-    # derivable as the best 8 of the trailing 20 differentials. So: recorded when
-    # genuinely known, derived when not.
-    index_at_time: Mapped[Numeric | None] = mapped_column(Numeric(3, 1))
+    # No index is stored alongside the score, and the reason is worth keeping:
+    # a round must never be graded against *today's* numbers, because that
+    # silently rewrites every past round and destroys every trend. An
+    # `index_at_time` column used to be how that was avoided. It is not needed:
+    # played_on already makes each round's own history recoverable, so the API
+    # grades every round on the rounds played before it -- see
+    # api/routers/rounds.py. Point-in-time correctness comes from the date, not
+    # from a remembered number.
 
     # Playing Conditions Calculation for the day. Almost always 0.
     pcc: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
@@ -201,31 +204,3 @@ class Round(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Round {self.gross_score} on {self.played_on}>"
-
-
-class HandicapSnapshot(Base):
-    """A Handicap Index as it stood on a given date.
-
-    Separate from `rounds.index_at_time` and serving a different purpose: this
-    records the *official* index published by a handicap service, which can
-    legitimately differ from what this app computes -- different rounds posted,
-    a real PCC, the WHS safeguards. Keeping both means the app can show its own
-    figure against the official one without either overwriting the other.
-    """
-
-    __tablename__ = "handicap_snapshots"
-    __table_args__ = (
-        UniqueConstraint("user_id", "effective_on", name="uq_snapshot_user_date"),
-    )
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), index=True
-    )
-    effective_on: Mapped[date] = mapped_column(Date)
-    index_value: Mapped[Numeric] = mapped_column(Numeric(3, 1))
-
-    user: Mapped["User"] = relationship(back_populates="handicap_snapshots")
-
-    def __repr__(self) -> str:  # pragma: no cover
-        return f"<HandicapSnapshot {self.index_value} on {self.effective_on}>"

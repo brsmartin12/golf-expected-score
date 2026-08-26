@@ -23,7 +23,7 @@ while leaving `import db.config` genuinely free of side effects.
 
 from typing import TYPE_CHECKING
 
-from db.models import Base, Course, HandicapSnapshot, Round, Tee, User
+from db.models import Base, Course, Round, Tee, User
 
 if TYPE_CHECKING:  # for type checkers and editors only; not executed at runtime
     from db.session import SessionLocal, engine, get_session, session_scope
@@ -43,7 +43,6 @@ def __getattr__(name: str):
 __all__ = [
     "Base",
     "Course",
-    "HandicapSnapshot",
     "Round",
     "Tee",
     "User",

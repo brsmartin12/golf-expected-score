@@ -25,6 +25,9 @@ Retyping 55 and 155 here would create a second source of truth that could drift.
 The validation now happens twice on purpose, at two different altitudes:
 Pydantic rejects bad input at the HTTP boundary with a helpful 422, and
 `handicap.py` still guards itself for any non-HTTP caller.
+
+No handicap index appears anywhere below. The app neither takes one nor
+computes one -- see the module docstring in `golf/handicap.py` for why.
 """
 
 from datetime import date
@@ -33,12 +36,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from golf.handicap import MAX_SLOPE, MIN_SLOPE
 
-# The WHS caps a Handicap Index at 54.0. Better-than-scratch players carry a
-# "plus" handicap, which is negative in the arithmetic -- nobody is near -10.
-MIN_INDEX = -10.0
-MAX_INDEX = 54.0
-
-
 # ---------------------------------------------------------------------------
 # Shared field definitions
 # ---------------------------------------------------------------------------
@@ -46,12 +43,6 @@ MAX_INDEX = 54.0
 # constraints and descriptions are written once. Each model still declares its
 # own attributes -- this is deduplication of the *definition*, not inheritance.
 
-_HANDICAP_INDEX = Field(
-    ...,
-    ge=MIN_INDEX,
-    le=MAX_INDEX,
-    description="Your official WHS Handicap Index. Negative for a plus handicap.",
-)
 _SLOPE_RATING = Field(
     ...,
     ge=MIN_SLOPE,
@@ -67,143 +58,6 @@ _COURSE_RATING = Field(
     le=90,
     description="Course Rating of the tee played: what a scratch golfer is expected to shoot.",
 )
-_PAR = Field(
-    None,
-    gt=0,
-    description="Par for the tee played. Optional -- only needed for Course Handicap.",
-)
-
-
-class PotentialScoreRequest(BaseModel):
-    """Inputs for 'what does this handicap shoot here when it plays well?'"""
-
-    handicap_index: float = _HANDICAP_INDEX
-    slope_rating: float = _SLOPE_RATING
-    course_rating: float = _COURSE_RATING
-    par: int | None = _PAR
-
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {
-                    "handicap_index": 10.0,
-                    "slope_rating": 130,
-                    "course_rating": 71.5,
-                    "par": 72,
-                }
-            ]
-        }
-    }
-
-
-class PotentialScoreResponse(BaseModel):
-    """What a given Handicap Index posts on a given tee when it plays well.
-
-    NOT its typical score: an index averages the best 8 of the last 20
-    differentials, so this is roughly a top-quartile round. The typical figure
-    needs a scoring record and arrives with the analytics layer.
-
-    `course_handicap` and `par_plus_course_handicap` are null when the request
-    omitted `par`, since both formulas need it.
-    """
-
-    potential_score: float = Field(
-        ...,
-        description=(
-            "Handicap Index x (Slope / 113) + Course Rating, to one decimal. The "
-            "score this index posts when it plays WELL -- not its typical score."
-        ),
-    )
-    course_handicap: int | None = Field(
-        None, description="Strokes received on this tee, rounded to a whole number."
-    )
-    par_plus_course_handicap: int | None = Field(
-        None,
-        description=(
-            "The same potential as a whole number. Identical formula to "
-            "potential_score -- the Par term cancels -- so the two can sit up to "
-            "half a stroke apart purely from rounding."
-        ),
-    )
-
-
-class RoundRequest(BaseModel):
-    """Inputs for grading a round that has actually been played."""
-
-    score: float = Field(
-        ...,
-        gt=0,
-        le=200,
-        description="Adjusted Gross Score for the round.",
-    )
-    handicap_index: float = _HANDICAP_INDEX
-    slope_rating: float = _SLOPE_RATING
-    course_rating: float = _COURSE_RATING
-    pcc: float = Field(
-        0.0,
-        ge=-1,
-        le=3,
-        description=(
-            "Playing Conditions Calculation for the day. Almost always 0; the "
-            "WHS allows -1 to +3."
-        ),
-    )
-
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {
-                    "score": 88,
-                    "handicap_index": 10.0,
-                    "slope_rating": 130,
-                    "course_rating": 71.5,
-                    "pcc": 0.0,
-                }
-            ]
-        }
-    }
-
-
-class RoundResponse(BaseModel):
-    """How a played round rates -- the whole point of the app, in a few numbers."""
-
-    score: float = Field(..., description="The score submitted, echoed back.")
-    potential_score: float = Field(
-        ..., description="What this Handicap Index posts here when it plays well."
-    )
-    strokes_vs_potential: float = Field(
-        ...,
-        description=(
-            "Potential minus actual. POSITIVE means you beat your potential: "
-            "a 79 against a potential of 83.0 is +4.0. This is the ANALYSIS "
-            "orientation -- higher is better, so averaging it across a course "
-            "or a season reads the natural way. For display, use to_potential."
-        ),
-    )
-    to_potential: float = Field(
-        ...,
-        description=(
-            "The same gap in golf's to-par orientation: POSITIVE is over "
-            "(worse), NEGATIVE is under (better). An 88 against a potential "
-            "of 83.0 is +5.0; a 79 is -4.0. Exactly the negative of "
-            "strokes_vs_potential, and the one to put in front of a golfer -- a "
-            "minus sign already means 'under par', so showing -5.0 for a round "
-            "five strokes WORSE than their potential inverts the convention every "
-            "leaderboard has trained them on."
-        ),
-    )
-    score_differential: float = Field(
-        ...,
-        description=(
-            "The round on a neutral scale, comparable across courses. This is "
-            "the number that feeds a Handicap Index."
-        ),
-    )
-    beat_potential: bool = Field(
-        ..., description="Convenience flag: was strokes_vs_potential positive?"
-    )
-
-
 # ---------------------------------------------------------------------------
 # Stored data: courses, tees and rounds
 # ---------------------------------------------------------------------------
@@ -287,16 +141,6 @@ class RoundCreate(BaseModel):
         ),
     )
     gross_score: int = Field(..., gt=0, le=200, examples=[88])
-    index_at_time: float | None = Field(
-        None,
-        ge=MIN_INDEX,
-        le=MAX_INDEX,
-        description=(
-            "Handicap Index in effect on the day. Optional: leave it out for "
-            "backfilled rounds, where it is derivable from the surrounding "
-            "rounds rather than remembered."
-        ),
-    )
     pcc: int = Field(0, ge=-1, le=3)
     is_nine_hole: bool = False
     notes: str | None = Field(None, max_length=500)
@@ -306,14 +150,13 @@ class RoundRead(BaseModel):
     """A stored round, with the derived numbers computed on the way out.
 
     Nothing derived is stored -- see the convention in CLAUDE.md. The
-    differential, the potential and the gap are all recomputed from the raw row
-    every time it is read, so a formula fix cannot leave the database
-    disagreeing with the code.
+    differential and both benchmarks are recomputed from the raw rows every time
+    they are read, so a formula fix cannot leave the database disagreeing with
+    the code.
 
-    `score_differential` is always present: it needs only the score, the rating,
-    the slope and the PCC. The three index-dependent fields are null when
-    `index_at_time` is unknown, which is the normal case for backfilled rounds
-    until the Tier 2 analytics can derive it.
+    `score_differential` needs only this one round, so it is always present.
+    Everything else is a quantile of the rounds played BEFORE this one, and is
+    null until there are enough of them -- see `rounds_of_history`.
     """
 
     id: int
@@ -324,8 +167,52 @@ class RoundRead(BaseModel):
     is_nine_hole: bool
     notes: str | None
 
-    score_differential: float
-    index_at_time: float | None
-    potential_score: float | None
-    strokes_vs_potential: float | None
-    to_potential: float | None
+    score_differential: float = Field(
+        ...,
+        description=(
+            "The round on a neutral scale, comparable across courses. Every "
+            "figure below is a quantile of these."
+        ),
+    )
+    rounds_of_history: int = Field(
+        ...,
+        description=(
+            "How many earlier rounds the two benchmarks were drawn from, capped "
+            "at the 20-round window. Below the minimum the benchmarks are null "
+            "and the screen shows a countdown instead of a number."
+        ),
+    )
+
+    typical_score: float | None = Field(
+        None,
+        description=(
+            "The median of the earlier differentials, expressed as a score on "
+            "THIS tee. What this golfer usually shoots here."
+        ),
+    )
+    potential_score: float | None = Field(
+        None,
+        description=(
+            "The 20th percentile of the earlier differentials, as a score on "
+            "this tee. What this golfer shoots here when they play well. Not a "
+            "handicap and never to be used as one -- see golf/scoring.py."
+        ),
+    )
+
+    to_typical: float | None = Field(
+        None,
+        description=(
+            "Score minus typical, in golf's to-par orientation: NEGATIVE is "
+            "better than usual, POSITIVE is worse. An 88 against a typical of "
+            "90.0 is -2.0. A minus sign already means 'under par' to a golfer, "
+            "so every stroke-denominated field the app displays runs this way."
+        ),
+    )
+    to_potential: float | None = Field(
+        None,
+        description=(
+            "Score minus potential, same orientation. Negative here means a "
+            "round better than this golfer's own best form -- rare by "
+            "construction, since potential is a 20th percentile."
+        ),
+    )

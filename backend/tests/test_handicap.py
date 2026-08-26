@@ -1,4 +1,4 @@
-"""Tests for the handicap math.
+"""Tests for the single-round handicap math.
 
 Every expected value below was worked out by hand from the WHS formulas, not
 generated from the code -- otherwise the tests would only prove the code agrees
@@ -11,50 +11,51 @@ Notes on pytest idioms used here:
     binary floating point.
   - @pytest.mark.parametrize runs the same test body over several inputs, each
     reported as a separate test.
+
+Typical and potential are no longer here. They are quantiles of a scoring
+record rather than functions of an index -- see tests/test_scoring.py.
 """
 
 import pytest
 
 from golf.handicap import (
-    _potential_score_exact,
     _round_half_up,
     course_handicap,
-    potential_score,
     playing_handicap,
     score_differential,
-    strokes_vs_potential,
 )
 
-# A representative course: HI 10.0 player, moderately hard tee.
-#   10.0 x 130/113           = 11.504 strokes
-#   course handicap: 11.504 + (71.5 - 72) = 11.004  -> 11
-#   potential score: 11.504 + 71.5        = 83.004  -> 83.0
-BASELINE = dict(handicap_index=10.0, slope_rating=130, course_rating=71.5)
-BASELINE_PAR = 72
+# A representative course: moderately hard tee.
+COURSE = dict(course_rating=71.5, slope_rating=130)
+PAR = 72
 
 
 # ---------------------------------------------------------------------------
-# Core formulas
+# Score differential -- the app's actual purpose
 # ---------------------------------------------------------------------------
-
-
-def test_course_handicap_baseline():
-    assert course_handicap(**BASELINE, par=BASELINE_PAR) == 11
-
-
-def test_potential_score_baseline():
-    assert potential_score(**BASELINE) == pytest.approx(83.0)
 
 
 def test_score_differential_baseline():
-    # (88 - 71.5) x 113/130 = 14.342
+    # (88 - 71.5) x 113/130 = 14.342 -> 14.3
     assert score_differential(88, 71.5, 130) == pytest.approx(14.3)
 
 
-def test_scratch_golfer_on_standard_course():
-    """A 0.0 index on a slope-113 course gets no strokes, so its potential is the rating."""
-    assert course_handicap(0.0, 113, 72.0, 72) == 0
-    assert potential_score(0.0, 113, 72.0) == pytest.approx(72.0)
+def test_the_whole_point_same_score_different_courses():
+    """An 88 is a very different round depending on where it was shot.
+
+    This is the app's thesis: on a brutal course an 88 rates 10.5 (a strong
+    round), while on an easy one the same 88 rates 19.0.
+    """
+    on_a_monster = score_differential(88, 74.5, 145)
+    on_a_pushover = score_differential(88, 69.0, 113)
+
+    assert on_a_monster == pytest.approx(10.5)
+    assert on_a_pushover == pytest.approx(19.0)
+    assert on_a_monster < on_a_pushover
+
+
+def test_shooting_the_course_rating_on_a_standard_course_rates_zero():
+    assert score_differential(72, 72.0, 113) == pytest.approx(0.0)
 
 
 def test_pcc_adjusts_the_differential():
@@ -62,6 +63,27 @@ def test_pcc_adjusts_the_differential():
     without_pcc = score_differential(88, 71.5, 130)
     with_pcc = score_differential(88, 71.5, 130, pcc=1.0)
     assert with_pcc < without_pcc
+
+
+# ---------------------------------------------------------------------------
+# Course handicap
+#
+# These take an OFFICIAL, externally-issued index -- they exist for the net
+# match calculator, not for anything the app computes about you.
+# ---------------------------------------------------------------------------
+
+
+def test_course_handicap_baseline():
+    # 10.0 x 130/113 = 11.504, + (71.5 - 72) = 11.004 -> 11
+    assert course_handicap(10.0, **COURSE, par=PAR) == 11
+
+
+def test_scratch_golfer_on_a_standard_course_gets_no_strokes():
+    assert course_handicap(0.0, 113, 72.0, 72) == 0
+
+
+def test_a_harder_tee_gives_more_strokes():
+    assert course_handicap(18.0, 145, 74.5, 72) > course_handicap(18.0, 105, 68.0, 72)
 
 
 # ---------------------------------------------------------------------------
@@ -90,48 +112,6 @@ def test_round_half_up_goes_away_from_zero(value, expected):
 
 
 # ---------------------------------------------------------------------------
-# The Par identity
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "handicap_index,slope_rating,course_rating,par",
-    [
-        (10.0, 130, 71.5, 72),
-        (0.0, 113, 72.0, 72),
-        (22.4, 145, 74.5, 72),
-        (4.1, 118, 69.8, 71),
-        (30.0, 155, 76.2, 73),
-    ],
-)
-def test_par_plus_course_handicap_equals_potential_score(
-    handicap_index, slope_rating, course_rating, par
-):
-    """Par + Course Handicap and Potential Score are the same formula.
-
-        Par + [ HI x (Slope/113) + (CR - Par) ]  ==  HI x (Slope/113) + CR
-
-    Adding an integer Par before or after rounding is the same operation, so
-    this identity is exact. It locks the two functions together: change one
-    formula without the other and this fails.
-    """
-    whole_stroke = par + course_handicap(handicap_index, slope_rating, course_rating, par)
-    exact = _potential_score_exact(handicap_index, slope_rating, course_rating)
-    assert whole_stroke == _round_half_up(exact)
-
-
-def test_the_two_presentations_can_differ_by_half_a_stroke():
-    """Documents the rounding gap as intended behaviour, not a bug.
-
-    10.0 x 130/113 = 11.504, and here CR == Par, so:
-        course handicap -> 12  =>  par + ch = 84
-        potential score -> 11.504 + 72 = 83.504 -> 83.5
-    """
-    assert potential_score(10.0, 130, 72.0) == pytest.approx(83.5)
-    assert 72 + course_handicap(10.0, 130, 72.0, 72) == 84
-
-
-# ---------------------------------------------------------------------------
 # Playing handicap
 # ---------------------------------------------------------------------------
 
@@ -154,34 +134,6 @@ def test_playing_handicap_applies_allowance(course_hcp, allowance, expected):
 
 
 # ---------------------------------------------------------------------------
-# Strokes vs potential -- the app's actual purpose
-# ---------------------------------------------------------------------------
-
-
-def test_beating_your_potential_is_positive():
-    # potential 83.004, shot 79 -> +4.0
-    assert strokes_vs_potential(79, **BASELINE) == pytest.approx(4.0)
-
-
-def test_missing_your_potential_is_negative():
-    assert strokes_vs_potential(88, **BASELINE) == pytest.approx(-5.0)
-
-
-def test_the_whole_point_same_score_different_courses():
-    """An 88 is a very different round depending on where it was shot.
-
-    This is the app's thesis: on a brutal course an 88 rates 10.5 (a strong
-    round), while on an easy one the same 88 rates 19.0.
-    """
-    on_a_monster = score_differential(88, 74.5, 145)
-    on_a_pushover = score_differential(88, 69.0, 113)
-
-    assert on_a_monster == pytest.approx(10.5)
-    assert on_a_pushover == pytest.approx(19.0)
-    assert on_a_monster < on_a_pushover
-
-
-# ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
 
@@ -189,13 +141,13 @@ def test_the_whole_point_same_score_different_courses():
 @pytest.mark.parametrize("bad_slope", [0, 54, 156, 200, -10])
 def test_slope_outside_the_legal_range_is_rejected(bad_slope):
     with pytest.raises(ValueError, match="slope_rating"):
-        potential_score(10.0, bad_slope, 71.5)
+        score_differential(88, 71.5, bad_slope)
 
 
 @pytest.mark.parametrize("bad_rating", [0, -1.0])
 def test_non_positive_course_rating_is_rejected(bad_rating):
     with pytest.raises(ValueError, match="course_rating"):
-        potential_score(10.0, 130, bad_rating)
+        score_differential(88, bad_rating, 130)
 
 
 def test_non_positive_par_is_rejected():
@@ -210,5 +162,5 @@ def test_negative_allowance_is_rejected():
 
 def test_slope_boundaries_are_allowed():
     """55 and 155 are legal; the check is inclusive."""
-    assert potential_score(10.0, 55, 71.5) > 0
-    assert potential_score(10.0, 155, 71.5) > 0
+    assert score_differential(88, 71.5, 55) > 0
+    assert score_differential(88, 71.5, 155) > 0

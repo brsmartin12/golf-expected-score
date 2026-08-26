@@ -1,7 +1,10 @@
-"""Golf handicap calculations.
+"""Golf scoring math.
 
-Re-exports the public functions so callers can `from golf import potential_score`
+Re-exports the public functions so callers can `from golf import score_differential`
 instead of reaching into the module path.
+
+Two modules, split by what they take: `handicap` answers questions about a
+single round, `scoring` answers questions about a scoring record.
 """
 
 from golf.handicap import (
@@ -9,19 +12,35 @@ from golf.handicap import (
     MIN_SLOPE,
     STANDARD_SLOPE,
     course_handicap,
-    potential_score,
     playing_handicap,
     score_differential,
-    strokes_vs_potential,
+)
+from golf.scoring import (
+    MINIMUM_ROUNDS,
+    POTENTIAL_QUANTILE,
+    TYPICAL_QUANTILE,
+    WINDOW,
+    potential_differential,
+    quantile,
+    score_from_differential,
+    trailing,
+    typical_differential,
 )
 
 __all__ = [
     "MAX_SLOPE",
     "MIN_SLOPE",
+    "MINIMUM_ROUNDS",
+    "POTENTIAL_QUANTILE",
     "STANDARD_SLOPE",
+    "TYPICAL_QUANTILE",
+    "WINDOW",
     "course_handicap",
-    "potential_score",
     "playing_handicap",
+    "potential_differential",
+    "quantile",
     "score_differential",
-    "strokes_vs_potential",
+    "score_from_differential",
+    "trailing",
+    "typical_differential",
 ]
