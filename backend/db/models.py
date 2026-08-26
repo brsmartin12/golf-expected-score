@@ -128,6 +128,27 @@ class Tee(Base):
         ),
         CheckConstraint("course_rating > 0", name="ck_tee_course_rating_positive"),
         CheckConstraint("par > 0", name="ck_tee_par_positive"),
+        # The nine-hole figures are nullable, but a nine is only usable when
+        # BOTH of its numbers are present -- a rating without a slope cannot
+        # produce a differential. These make the half-filled state
+        # unrepresentable rather than something the read path has to defend
+        # against on every row.
+        CheckConstraint(
+            "(front_course_rating IS NULL) = (front_slope_rating IS NULL)",
+            name="ck_tee_front_nine_complete",
+        ),
+        CheckConstraint(
+            "(back_course_rating IS NULL) = (back_slope_rating IS NULL)",
+            name="ck_tee_back_nine_complete",
+        ),
+        CheckConstraint(
+            f"front_slope_rating IS NULL OR front_slope_rating BETWEEN {MIN_SLOPE} AND {MAX_SLOPE}",
+            name="ck_tee_front_slope_in_whs_range",
+        ),
+        CheckConstraint(
+            f"back_slope_rating IS NULL OR back_slope_rating BETWEEN {MIN_SLOPE} AND {MAX_SLOPE}",
+            name="ck_tee_back_slope_in_whs_range",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -141,6 +162,22 @@ class Tee(Base):
     course_rating: Mapped[Numeric] = mapped_column(Numeric(4, 1))
     slope_rating: Mapped[int] = mapped_column(Integer)
     yardage: Mapped[int | None] = mapped_column(Integer)
+
+    # Each nine is rated separately, and the two are NOT interchangeable. The
+    # USGA publishes all four numbers per tee, and the slope is the reason they
+    # matter: halving the 18-hole Course Rating is accurate to about a tenth of
+    # a stroke, but the slopes of the two nines routinely differ by several
+    # points and occasionally by ten (116 front against 105 back is a real
+    # published example). Substituting the 18-hole slope costs up to 0.87
+    # strokes -- several times what folding nines into the numbers gains.
+    #
+    # Nullable because most courses will be entered without them, and a nine
+    # played from a tee that lacks them is simply left out of the quantiles
+    # rather than approximated. See golf/scoring.py.
+    front_course_rating: Mapped[Numeric | None] = mapped_column(Numeric(4, 1))
+    front_slope_rating: Mapped[int | None] = mapped_column(Integer)
+    back_course_rating: Mapped[Numeric | None] = mapped_column(Numeric(4, 1))
+    back_slope_rating: Mapped[int | None] = mapped_column(Integer)
 
     course: Mapped["Course"] = relationship(back_populates="tees")
     rounds: Mapped[list["Round"]] = relationship(back_populates="tee")
@@ -160,6 +197,10 @@ class Round(Base):
     __table_args__ = (
         CheckConstraint("gross_score > 0", name="ck_round_score_positive"),
         CheckConstraint("pcc BETWEEN -1 AND 3", name="ck_round_pcc_in_whs_range"),
+        CheckConstraint(
+            "nine IS NULL OR nine IN ('front', 'back')",
+            name="ck_round_nine_is_front_or_back",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -187,9 +228,14 @@ class Round(Base):
     # Playing Conditions Calculation for the day. Almost always 0.
     pcc: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
-    # Nine-hole rounds are stored but not yet handled by the maths -- the WHS
-    # combines two nines into an 18-hole differential, which is not implemented.
-    is_nine_hole: Mapped[bool] = mapped_column(default=False, server_default="false")
+    # WHICH nine, not merely whether it was one. This replaced a boolean, and
+    # the extra information is not optional: the front and back are rated
+    # separately, so "a nine at this tee" does not identify a Course Rating or
+    # a Slope. NULL means all eighteen holes.
+    #
+    # One nullable column rather than a boolean plus a side, so the contradictory
+    # state -- flagged as nine holes, no idea which -- cannot be stored.
+    nine: Mapped[str | None] = mapped_column(String(5))
 
     notes: Mapped[str | None] = mapped_column(String(500))
 

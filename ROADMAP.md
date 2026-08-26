@@ -515,6 +515,85 @@ existing math: framework-free, no I/O, provable.
   potential score, the score that would move your typical down, and your best
   round here. A reason to open the app *before* playing, not only after.
 
+## Nine-hole rounds
+
+People play nine when time is short, and for a while this app logged those
+rounds and refused to grade them. That is the wrong trade: a round the app has
+nothing to say about is a round people stop entering.
+
+**The WHS solved this in 2024.** Before then a nine waited for another nine and
+the two were paired into one 18-hole differential. The revision scales a nine up
+immediately instead, filling the holes not played with the player's *expected*
+score, so it counts the same day. Pairing two nines from different days and
+different weather was a worse estimate of one day's golf.
+
+**Their fill does not transfer to us unchanged.** A Handicap Index is an average
+of the best 8; typical and potential are quantiles. A quantile moves with the
+*spread* of the population it is drawn from, and both obvious ways of scaling a
+nine get the spread wrong:
+
+| Method | Contributed value | Spread vs. a real eighteen |
+|---|---|---|
+| Double it | 2 × d₉ | **1.41×** — doubling doubles the noise too |
+| Fill with the mean (WHS) | d₉ + typical/2 | **0.71×** — an imputed mean adds no variance |
+
+Both are wrong by exactly √2, in opposite directions. Written as *centre +
+deviation × multiplier*, doubling uses 2 and mean-filling uses 1, so the
+multiplier that reproduces a real eighteen's spread is their geometric mean:
+
+```
+contributed = typical + (2 x nine_differential - typical) / sqrt(2)
+```
+
+Simulated over 8,000 golfers with a 20-round window, against the true
+population quantiles:
+
+| Nines | Method | typical RMSE | potential bias | potential RMSE |
+|---:|---|---:|---:|---:|
+| 0% | *(baseline)* | 0.771 | **+0.174** | 0.825 |
+| 25% | exclude | 0.902 | +0.231 | 0.959 |
+| 25% | double | 0.825 | −0.024 | 0.880 |
+| 25% | fill (WHS) | 0.813 | +0.372 | 0.903 |
+| 25% | **√2** | 0.816 | **+0.182** | **0.853** |
+| 50% | exclude | 1.060 | +0.306 | 1.118 |
+| 50% | double | 0.856 | −0.225 | 0.980 |
+| 50% | fill (WHS) | 0.844 | +0.527 | 1.004 |
+| 50% | **√2** | 0.836 | **+0.179** | **0.886** |
+
+The +0.174 at 0% nines is a floor — small-sample bias in a 20th-percentile
+estimate, present whether or not anyone ever plays nine holes. The √2 method
+holds that figure at every nine share, so it adds no bias of its own. Doubling
+drifts negative and flatters potential; mean-filling drifts to +0.53 and
+understates it by half a stroke. At half the rounds being nines, √2 cuts the
+error on both figures by about 21% against throwing them away.
+
+**The ratings matter more than the method.** A nine has its own published Course
+Rating and Slope, and the tempting shortcut is to halve the 18-hole rating and
+reuse the 18-hole slope. Checked against real USGA data (course 3035, eleven
+tees):
+
+| | mean abs error | worst |
+|---|---|---|
+| CR₉ ≈ CR₁₈ / 2 | 0.13 strokes | 0.25 |
+| slope₉ ≈ slope₁₈ | 2.0 points | 6 |
+
+The rating halves almost perfectly — the two nines have to sum to the eighteen.
+The **slope** does not: that card's Gold tee is 111 overall but 116 front and
+105 back. Approximating costs up to 0.87 strokes on the 18-hole scale, four
+times what the conversion gains, so a nine only joins the population when its
+tee has real nine-hole figures. Without them the round is logged, listed, and
+labelled *not rated*, with a prompt to add them.
+
+**A nine is still graded on its own scale.** The 18-hole benchmark is halved and
+run through that nine's rating, so the card says *"your typical back nine here
+is 38.4"* — never half of an eighteen dressed up as a full round.
+
+**One real limit.** The conversion pivots on the golfer's own median, so the
+eight-round minimum counts *full rounds only*. Someone with seven eighteens and
+a pile of nines has no benchmark and no way to earn one from nines alone; there
+is nothing to calibrate the spread against. The countdown says "full rounds" for
+that reason.
+
 ## Tier 3 — Current form (the headline)
 
 Model the differential series instead of ranking it.

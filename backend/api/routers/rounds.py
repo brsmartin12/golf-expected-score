@@ -14,6 +14,15 @@ Each round is graded against the rounds played BEFORE it and never against
 itself or against later ones. That point-in-time discipline is what keeps the
 history stable: grading every past round against today's numbers would rewrite
 the whole record every time a new score is logged, and destroy every trend.
+
+Two scales in one list
+----------------------
+A nine-hole round is rated against that nine's own Course Rating and Slope, so
+its differential is on a half scale. `golf.scoring` folds it onto the 18-hole
+scale for the quantiles; this module does the reverse on the way out, turning
+the 18-hole benchmarks back into a score over the holes that were actually
+played. A nine is therefore compared against a typical NINE, and the numbers on
+every row of the list mean the same thing.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -23,82 +32,74 @@ from sqlalchemy.orm import Session, selectinload
 from api.deps import get_current_user
 from api.schemas import RoundCreate, RoundRead
 from db import Round, Tee, User, get_session
-from golf import (
-    MINIMUM_ROUNDS,
-    POTENTIAL_QUANTILE,
-    TYPICAL_QUANTILE,
-    WINDOW,
-    score_differential,
-    score_from_differential,
-    trailing,
-)
+from golf import Played, benchmarks, score_differential, score_from_differential
 
 router = APIRouter(prefix="/rounds", tags=["rounds"])
 
 
-def _differential(round_: Round) -> float:
-    """This round on the neutral scale.
+def _holes_played(round_: Round) -> tuple[float, int] | None:
+    """The Course Rating and Slope for the holes this round actually covered.
+
+    None when a nine was played from a tee whose nine-hole figures are missing.
+    That round cannot be rated at all -- the 18-hole numbers would call half a
+    round several strokes better than it was -- so it is carried through
+    ungraded rather than approximated.
 
     float() appears because the ratings are Numeric in the database, which reads
     back as Decimal; `golf` works in float. This is the boundary where that
     conversion belongs.
     """
-    return score_differential(
-        adjusted_gross_score=round_.gross_score,
-        course_rating=float(round_.tee.course_rating),
-        slope_rating=round_.tee.slope_rating,
-        pcc=round_.pcc,
-    )
+    tee = round_.tee
+
+    if round_.nine is None:
+        return float(tee.course_rating), tee.slope_rating
+
+    if round_.nine == "front":
+        rating, slope = tee.front_course_rating, tee.front_slope_rating
+    else:
+        rating, slope = tee.back_course_rating, tee.back_slope_rating
+
+    if rating is None or slope is None:
+        return None
+    return float(rating), slope
+
+
+def _pcc(round_: Round) -> float:
+    """Half a day's Playing Conditions adjustment applies to half a round."""
+    return round_.pcc / 2 if round_.nine else float(round_.pcc)
 
 
 def _read_models(rounds: list[Round]) -> list[RoundRead]:
-    """Grade an oldest-first list of rounds, each against the ones before it.
+    """Grade an oldest-first list of rounds, each against the ones before it."""
+    ratings = [_holes_played(r) for r in rounds]
 
-    Nine-hole rounds are carried through with null benchmarks and are left out
-    of the population the quantiles are drawn from. The `tees` table stores
-    18-hole Course Ratings and Slopes, so running half a round through the
-    differential formula produces a number several strokes too low -- one that
-    would drag a golfer's typical and potential down for the next twenty rounds.
-    """
-    differentials = [_differential(r) for r in rounds]
+    differentials: list[float | None] = []
+    for round_, rating in zip(rounds, ratings):
+        if rating is None:
+            differentials.append(None)
+            continue
+        course_rating, slope = rating
+        differentials.append(
+            score_differential(round_.gross_score, course_rating, slope, _pcc(round_))
+        )
 
-    # Positions in `rounds` that belong in the quantile population, and their
-    # differentials in the same order.
-    full = [i for i, r in enumerate(rounds) if not r.is_nine_hole]
-    full_differentials = [differentials[i] for i in full]
-
-    typical_at = trailing(full_differentials, TYPICAL_QUANTILE)
-    potential_at = trailing(full_differentials, POTENTIAL_QUANTILE)
-
-    # Map each full round back to its place in the quantile series, so the
-    # per-round lookup below is a dict hit rather than a scan.
-    position = {round_index: n for n, round_index in enumerate(full)}
+    # Rounds that can be rated, in order, and where each sits in `rounds`.
+    usable = [i for i, d in enumerate(differentials) if d is not None]
+    series = [
+        Played(differentials[i], is_nine=rounds[i].nine is not None) for i in usable
+    ]
+    marks = benchmarks(series)
+    position = {round_index: n for n, round_index in enumerate(usable)}
 
     models = []
     for i, round_ in enumerate(rounds):
         n = position.get(i)
-
-        if n is None:  # a nine-hole round: outside the population entirely
-            history = 0
-            # Not `MINIMUM_ROUNDS`: no number of further rounds will ever get
-            # this one a verdict, so a countdown here would be a promise the app
-            # cannot keep. The screen branches on is_nine_hole instead.
-            countdown = 0
-            typical_differential = potential_differential = None
-        else:
-            history = min(n, WINDOW)
-            countdown = max(0, MINIMUM_ROUNDS - history)
-            typical_differential = typical_at[n]
-            potential_differential = potential_at[n]
-
         models.append(
             _one(
                 round_,
                 differentials[i],
-                history,
-                countdown,
-                typical_differential,
-                potential_differential,
+                ratings[i],
+                marks[n] if n is not None else None,
             )
         )
     return models
@@ -106,29 +107,35 @@ def _read_models(rounds: list[Round]) -> list[RoundRead]:
 
 def _one(
     round_: Round,
-    differential: float,
-    rounds_of_history: int,
-    rounds_until_benchmarks: int,
-    typical_differential: float | None,
-    potential_differential: float | None,
+    differential: float | None,
+    ratings: tuple[float, int] | None,
+    mark,
 ) -> RoundRead:
-    """Assemble one round's response, converting differentials back into scores.
+    """Assemble one round's response, converting benchmarks back into scores.
 
     A differential is course-neutral, which is what makes it comparable; a
     golfer is not thinking in differentials. `score_from_differential` puts both
-    benchmarks back into strokes on the tee that was actually played, so "you
-    usually shoot 90 here" is a sentence about this course.
+    benchmarks back into strokes on the holes that were played, so "you usually
+    shoot 90 here" is a sentence about this course.
+
+    For a nine, the 18-hole benchmark is halved before conversion -- half a
+    golfer's typical differential IS their typical nine -- and then run through
+    the nine's own rating and slope. No approximation enters: those are the
+    published figures for that side.
     """
     tee = round_.tee
-    course_rating = float(tee.course_rating)
+    share = 0.5 if round_.nine else 1.0
 
-    def as_score(d: float | None) -> float | None:
-        if d is None:
+    def as_score(differential_18: float | None) -> float | None:
+        if differential_18 is None or ratings is None:
             return None
-        return score_from_differential(d, course_rating, tee.slope_rating, round_.pcc)
+        course_rating, slope = ratings
+        return score_from_differential(
+            differential_18 * share, course_rating, slope, _pcc(round_)
+        )
 
-    typical = as_score(typical_differential)
-    potential = as_score(potential_differential)
+    typical = as_score(mark.typical if mark else None)
+    potential = as_score(mark.potential if mark else None)
 
     # Score minus benchmark: under is negative, and negative is good. See the
     # display convention in ROADMAP.md.
@@ -143,11 +150,11 @@ def _one(
         gross_score=round_.gross_score,
         course_name=tee.course.name,
         tee_name=tee.name,
-        is_nine_hole=round_.is_nine_hole,
+        nine=round_.nine,
         notes=round_.notes,
         score_differential=differential,
-        rounds_of_history=rounds_of_history,
-        rounds_until_benchmarks=rounds_until_benchmarks,
+        rounds_of_history=mark.rounds_of_history if mark else 0,
+        rounds_until_benchmarks=mark.rounds_until_benchmarks if mark else 0,
         typical_score=typical,
         potential_score=potential,
         to_typical=gap(typical),
@@ -215,7 +222,7 @@ def create_round(
         played_on=payload.played_on,
         gross_score=payload.gross_score,
         pcc=payload.pcc,
-        is_nine_hole=payload.is_nine_hole,
+        nine=payload.nine,
         notes=payload.notes,
     )
     session.add(round_)

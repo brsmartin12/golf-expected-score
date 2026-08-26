@@ -120,7 +120,10 @@ export default function Rounds() {
                 <div className="round__what">
                   <span className="round__course">{round.course_name}</span>
                   <span className="round__meta">
-                    {round.tee_name} &middot; {round.score_differential.toFixed(1)} diff
+                    {round.tee_name}
+                    {round.nine && ` · ${round.nine} 9`}
+                    {round.score_differential !== null &&
+                      ` · ${round.score_differential.toFixed(1)} diff`}
                   </span>
                 </div>
 
@@ -132,7 +135,9 @@ export default function Rounds() {
                     </span>
                   ) : (
                     <span className="round__gap round__gap--none">
-                      {round.is_nine_hole ? "9 holes" : "no history"}
+                      {round.score_differential === null
+                        ? "not rated"
+                        : "no history"}
                     </span>
                   )}
                 </div>

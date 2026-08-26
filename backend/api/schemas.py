@@ -32,7 +32,9 @@ computes one -- see the module docstring in `golf/handicap.py` for why.
 
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from golf.handicap import MAX_SLOPE, MIN_SLOPE
 
@@ -78,13 +80,39 @@ _COURSE_RATING = Field(
 
 
 class TeeCreate(BaseModel):
-    """One set of tees, as supplied when adding a course."""
+    """One set of tees, as supplied when adding a course.
+
+    The four nine-hole figures are optional, and they are the ones the USGA
+    prints beside the 18-hole numbers as "Front (9)" and "Back (9)". Without
+    them a nine played from this tee is logged but left out of the quantiles --
+    approximating them costs more than folding nines in gains. See the note in
+    `db/models.py`.
+    """
 
     name: str = Field(..., min_length=1, max_length=40, examples=["Blue"])
     par: int = Field(..., gt=0, le=100, examples=[72])
     course_rating: float = _COURSE_RATING
     slope_rating: int = Field(..., ge=MIN_SLOPE, le=MAX_SLOPE, examples=[130])
     yardage: int | None = Field(None, gt=0, examples=[6543])
+
+    front_course_rating: float | None = Field(None, gt=0, le=50, examples=[35.8])
+    front_slope_rating: int | None = Field(None, ge=MIN_SLOPE, le=MAX_SLOPE, examples=[130])
+    back_course_rating: float | None = Field(None, gt=0, le=50, examples=[36.1])
+    back_slope_rating: int | None = Field(None, ge=MIN_SLOPE, le=MAX_SLOPE, examples=[128])
+
+    @model_validator(mode="after")
+    def _nine_hole_figures_come_in_pairs(self) -> "TeeCreate":
+        """A rating with no slope cannot produce a differential, so reject the
+        half-filled state here rather than storing something unusable."""
+        for side in ("front", "back"):
+            rating = getattr(self, f"{side}_course_rating")
+            slope = getattr(self, f"{side}_slope_rating")
+            if (rating is None) != (slope is None):
+                raise ValueError(
+                    f"{side}_course_rating and {side}_slope_rating must be given "
+                    "together or not at all."
+                )
+        return self
 
 
 class CourseCreate(BaseModel):
@@ -116,6 +144,13 @@ class TeeRead(BaseModel):
     slope_rating: int
     yardage: int | None
 
+    # Null when this tee's nines have not been entered. The round-entry screen
+    # reads these to decide whether it can offer a nine-hole option at all.
+    front_course_rating: float | None
+    front_slope_rating: int | None
+    back_course_rating: float | None
+    back_slope_rating: int | None
+
 
 class CourseRead(BaseModel):
     """A course with its tees -- what the course picker renders."""
@@ -142,7 +177,14 @@ class RoundCreate(BaseModel):
     )
     gross_score: int = Field(..., gt=0, le=200, examples=[88])
     pcc: int = Field(0, ge=-1, le=3)
-    is_nine_hole: bool = False
+    nine: Literal["front", "back"] | None = Field(
+        None,
+        description=(
+            "Which nine was played, or null for all eighteen. The two nines "
+            "carry different Course Ratings and Slopes, so 'a nine' on its own "
+            "does not identify what to grade against."
+        ),
+    )
     notes: str | None = Field(None, max_length=500)
 
 
@@ -154,9 +196,14 @@ class RoundRead(BaseModel):
     they are read, so a formula fix cannot leave the database disagreeing with
     the code.
 
-    `score_differential` needs only this one round, so it is always present.
-    Everything else is a quantile of the rounds played BEFORE this one, and is
-    null until there are enough of them -- see `rounds_of_history`.
+    Everything below `score_differential` is a quantile of the rounds played
+    BEFORE this one, and is null until there are enough of them -- see
+    `rounds_until_benchmarks`.
+
+    Scale note: for a nine-hole round every stroke figure here is on the NINE's
+    scale. `typical_score` is what this golfer usually shoots over that nine,
+    not over eighteen, so `to_typical` compares like with like and the sign
+    means the same thing on every row of the list.
     """
 
     id: int
@@ -164,14 +211,16 @@ class RoundRead(BaseModel):
     gross_score: int
     course_name: str
     tee_name: str
-    is_nine_hole: bool
+    nine: Literal["front", "back"] | None
     notes: str | None
 
-    score_differential: float = Field(
-        ...,
+    score_differential: float | None = Field(
+        None,
         description=(
-            "The round on a neutral scale, comparable across courses. Every "
-            "figure below is a quantile of these."
+            "The round on a neutral scale, comparable across courses. Null in "
+            "exactly one case: a nine played from a tee whose nine-hole Course "
+            "Rating and Slope have not been entered, which cannot be rated at "
+            "all. Add them to the tee and this round starts counting."
         ),
     )
     rounds_of_history: int = Field(
@@ -184,25 +233,27 @@ class RoundRead(BaseModel):
     rounds_until_benchmarks: int = Field(
         ...,
         description=(
-            "How many more rounds are needed before this one could have been "
-            "graded; 0 once it has been. Sent so the screen can show an honest "
-            "countdown without hard-coding the minimum, which lives in "
-            "golf/scoring.py."
+            "How many more FULL rounds are needed before this one could have "
+            "been graded; 0 once it has been. Full rounds specifically: a nine "
+            "is scaled onto the 18-hole scale using the golfer's own median, so "
+            "there has to be one before any nine can count. Sent so the screen "
+            "can show an honest countdown without hard-coding the minimum, "
+            "which lives in golf/scoring.py."
         ),
     )
 
     typical_score: float | None = Field(
         None,
         description=(
-            "The median of the earlier differentials, expressed as a score on "
-            "THIS tee. What this golfer usually shoots here."
+            "The median of the earlier differentials, expressed as a score over "
+            "the holes THIS round covered. What this golfer usually shoots here."
         ),
     )
     potential_score: float | None = Field(
         None,
         description=(
-            "The 20th percentile of the earlier differentials, as a score on "
-            "this tee. What this golfer shoots here when they play well. Not a "
+            "The 20th percentile of the earlier differentials, on the same "
+            "scale. What this golfer shoots here when they play well. Not a "
             "handicap and never to be used as one -- see golf/scoring.py."
         ),
     )

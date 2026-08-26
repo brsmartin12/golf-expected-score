@@ -61,9 +61,16 @@ understandable steps over large one-shot generations.
 - **Testing:** pytest for backend logic
 
 ## Scope decisions (settled — don't relitigate without a reason)
-- **Score-only entry.** A round is date + course + tee + total score. No
-  hole-by-hole, no fairways/GIR/putts. Data-entry friction is what kills golf
-  apps; a round must stay a 15-second entry.
+- **Score-only entry.** A round is date + course + tee + total score, plus which
+  nine if it was not all eighteen. No hole-by-hole, no fairways/GIR/putts.
+  Data-entry friction is what kills golf apps; a round must stay a 15-second
+  entry.
+- **Nine-hole rounds are first-class.** People play nine when time is short, and
+  a round the app refuses to grade is a round they stop logging. A nine is rated
+  against that nine's own published Course Rating and Slope, then folded onto
+  the 18-hole scale with a spread correction — see `golf/scoring.py`, and the
+  section in `ROADMAP.md` for why doubling and the WHS's own method both distort
+  potential.
 - **Multi-user from the schema up.** This is for the developer *and golf
   friends*, so `user_id` exists from the first table, even before auth ships.
   Groups themselves are *additive* — two new tables, no changes to existing
@@ -96,7 +103,8 @@ understandable steps over large one-shot generations.
    models, API wiring (`/courses`, `/rounds`) and Alembic migrations. Two things
    are much cheaper now than later:
    - `tees` is its own table, not a column on `courses`. Slope and rating are
-     per-tee.
+     per-tee — and each nine has its own pair on top of that, nullable, because
+     the two nines are rated separately and their slopes routinely differ.
    - `rounds.played_on` is the date the round was **played**, not entered, and
      that is what makes point-in-time grading possible: every round is judged on
      the rounds played before it. Never grade history against *today's* numbers
@@ -142,7 +150,8 @@ ROADMAP.md            product vision and feature tiers — the "why"
 backend/
   pyproject.toml      package metadata; `pip install -e ".[dev]"` to set up
   golf/handicap.py    single-round math: differential, course handicap
-  golf/scoring.py     quantiles over a scoring record: typical, potential
+  golf/scoring.py     quantiles over a scoring record: typical, potential,
+                      and the nine-hole scale correction
   api/main.py         FastAPI routes; api/schemas.py holds the Pydantic models
   db/session.py       SQLAlchemy engine + session factory; reads DATABASE_URL
   db/models.py        the tables: users, courses, tees, rounds
@@ -191,6 +200,11 @@ later and nothing needs moving.
   records**, with pytest tests written first against known-correct values. Same
   rule as `handicap.py`: no framework, no I/O, no database access. The stats
   layer is the part worth proving correct.
+- **Never approximate a rating.** If the published Course Rating and Slope for
+  what was actually played are missing, the round is carried through ungraded
+  and the screen says what to enter. Substituting a nearby number is worse than
+  leaving the round out: at a tee whose nines are 116 and 105, using the 18-hole
+  slope costs up to 0.87 strokes, several times what including the round gains.
 - **Schema changes go through Alembic, never `create_all`.** `create_all` only
   ever creates, so it silently does nothing to a table that already exists.
   After changing a model, run `alembic revision --autogenerate -m "..."`, read

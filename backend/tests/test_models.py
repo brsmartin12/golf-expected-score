@@ -95,7 +95,7 @@ def test_defaults_are_applied(db_session):
     stored = db_session.scalars(select(Round)).one()
 
     assert stored.pcc == 0
-    assert stored.is_nine_hole is False
+    assert stored.nine is None  # all eighteen holes
     assert stored.created_at is not None  # the row's birthday, not the round's
 
 

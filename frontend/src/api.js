@@ -109,6 +109,17 @@ export function createCourse({ name, city, state, tee }) {
         par: tee.par,
         course_rating: tee.courseRating,
         slope_rating: tee.slopeRating,
+        // Each nine is rated separately by the USGA. Omitted when blank rather
+        // than sent as null, so the backend's paired-or-absent check sees a
+        // clean absence.
+        ...(tee.frontCourseRating === null ? {} : {
+          front_course_rating: tee.frontCourseRating,
+          front_slope_rating: tee.frontSlopeRating,
+        }),
+        ...(tee.backCourseRating === null ? {} : {
+          back_course_rating: tee.backCourseRating,
+          back_slope_rating: tee.backSlopeRating,
+        }),
       },
     ],
   });
@@ -118,10 +129,12 @@ export function createCourse({ name, city, state, tee }) {
  * Log a round. The response carries the verdict, so this is one request rather
  * than a save followed by a fetch — see the note on POST /rounds in the backend.
  */
-export function createRound({ teeId, playedOn, grossScore }) {
+export function createRound({ teeId, playedOn, grossScore, nine }) {
   return postJson("/rounds", {
     tee_id: teeId,
     played_on: playedOn,
     gross_score: grossScore,
+    // null means all eighteen holes; "front" or "back" names the nine played.
+    nine: nine || null,
   });
 }
