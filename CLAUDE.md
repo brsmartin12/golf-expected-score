@@ -201,6 +201,13 @@ later and nothing needs moving.
   records**, with pytest tests written first against known-correct values. Same
   rule as `handicap.py`: no framework, no I/O, no database access. The stats
   layer is the part worth proving correct.
+- **A nine counts once for a quantile and half for a mean.** The √2 scaling in
+  `golf/scoring.py` gives a scaled nine an eighteen's *distribution*, which is
+  what typical and potential need. Anything that averages or puts an error bar
+  on a window — the form delta, trend significance, course-fit shrinkage — must
+  instead double the nine and weight it 0.5, and divide by `Σ weights` rather
+  than the row count. Skip that and confidence intervals come out up to 20% too
+  narrow. See the nine-hole section in `ROADMAP.md`.
 - **Never approximate a rating.** If the published Course Rating and Slope for
   what was actually played are missing, the round is carried through ungraded
   and the screen says what to enter. Substituting a nearby number is worse than
