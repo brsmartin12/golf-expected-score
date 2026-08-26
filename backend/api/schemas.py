@@ -233,12 +233,10 @@ class RoundRead(BaseModel):
     rounds_until_benchmarks: int = Field(
         ...,
         description=(
-            "How many more FULL rounds are needed before this one could have "
-            "been graded; 0 once it has been. Full rounds specifically: a nine "
-            "is scaled onto the 18-hole scale using the golfer's own median, so "
-            "there has to be one before any nine can count. Sent so the screen "
-            "can show an honest countdown without hard-coding the minimum, "
-            "which lives in golf/scoring.py."
+            "How many more rounds are needed before this one could have been "
+            "graded; 0 once it has been. Nines count the same as eighteens "
+            "here. Sent so the screen can show an honest countdown without "
+            "hard-coding the minimum, which lives in golf/scoring.py."
         ),
     )
 

@@ -57,6 +57,10 @@ That is `eighteen_from_nine` below. It leaves potential's bias at +0.18 -- the
 same figure you get with no nine-hole rounds at all, which is small-sample bias
 in the estimator rather than anything the conversion introduced.
 
+A nine bootstraps its own history, incidentally. The pivot is a centre, not a
+spread, so a doubled nine estimates it well enough (about 0.09 strokes low) --
+which means a golfer who only ever plays nine holes still gets both figures.
+
 The catch is upstream, in the ratings. A nine needs its OWN Course Rating and
 Slope Rating, which the USGA publishes per tee. Halving the 18-hole rating is
 accurate to about 0.13 strokes, but the slope genuinely differs between the two
@@ -227,32 +231,44 @@ def benchmarks(
     against today's numbers silently rewrites every past round and destroys
     every trend; this is the discipline that prevents it.
 
-    Nines are folded in through `eighteen_from_nine`, which needs a typical to
-    pivot on -- so the minimum applies to the FULL rounds in the window, not to
-    the entry count. A golfer with seven eighteens and nine nines still has no
-    benchmark: there is nothing to calibrate the conversion against, and no
-    amount of nines supplies it. That is a real limit, not an oversight.
+    Nines are folded in through `eighteen_from_nine`, which needs a centre to
+    pivot on. That centre comes from every round in the window, with nines
+    doubled -- NOT from the full rounds alone.
+
+    The distinction matters more than it looks. Requiring full rounds for the
+    pivot means a golfer who mostly plays nine holes never gets a figure at all:
+    at a 75% nine share only one golfer in ten ever accumulates eight eighteens
+    inside a 20-round window. Doubling a nine's median to stand in for an
+    eighteen's is slightly biased -- about -0.09 strokes, because a sum of two
+    nines is less skewed than one nine, so doubling the median undershoots --
+    and that is a tenth of a stroke against showing nothing at all.
+
+    Measured over 4,000 golfers per case, pivoting on everything costs nothing
+    up to a 50% nine share and leaves potential marginally BETTER; past that it
+    is the difference between a figure with an RMSE near 1.0 and no figure. So
+    the minimum below counts rounds of any length.
     """
     result: list[Benchmark] = []
 
     for i in range(len(rounds)):
         history = rounds[max(0, i - window) : i]
-        full = [r.differential for r in history if not r.is_nine]
 
-        if len(full) < minimum_rounds:
+        if len(history) < minimum_rounds:
             result.append(
-                Benchmark(None, None, 0, max(0, minimum_rounds - len(full)))
+                Benchmark(None, None, 0, minimum_rounds - len(history))
             )
             continue
 
-        # The pivot: this golfer's median over the full rounds alone. Drawn from
-        # the same window, so it moves with them rather than lagging behind.
-        pivot = quantile(full, TYPICAL_QUANTILE)
-        population = full + [
-            eighteen_from_nine(r.differential, pivot)
-            for r in history
-            if r.is_nine
-        ]
+        full = [r.differential for r in history if not r.is_nine]
+        nines = [r.differential for r in history if r.is_nine]
+
+        # The pivot: this golfer's rough centre on the 18-hole scale, taken from
+        # every round in the window. A nine is doubled for this purpose only --
+        # a crude scaling, but it is estimating a centre, where the spread error
+        # doubling introduces does not apply. Drawn from the same window as the
+        # figures themselves, so it moves with them rather than lagging behind.
+        pivot = quantile(full + [2 * d for d in nines], TYPICAL_QUANTILE)
+        population = full + [eighteen_from_nine(d, pivot) for d in nines]
 
         result.append(
             Benchmark(

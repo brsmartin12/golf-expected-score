@@ -77,7 +77,7 @@ export default function VerdictCard({ round, onDismiss }) {
           </p>
           <p className="verdict__label">differential</p>
           <p className="verdict__says">
-            {plural(round.rounds_until_benchmarks, "full round")} and this gets
+            {plural(round.rounds_until_benchmarks, "round")} and this gets
             a verdict.
           </p>
         </>

@@ -347,16 +347,46 @@ def test_benchmarks_of_an_empty_series_is_empty():
 # ---------------------------------------------------------------------------
 
 
-def test_a_nine_does_not_count_toward_the_minimum():
-    """The conversion needs a pivot, and only full rounds supply one.
+def test_a_nine_counts_toward_the_minimum_like_any_other_round():
+    """Seven eighteens plus a nine is eight rounds, and eight rounds is enough.
 
-    Seven eighteens and a pile of nines is still no benchmark. That is a real
-    limit: there is nothing to calibrate the nines against.
+    The pivot the conversion needs is a CENTRE, and a doubled nine estimates a
+    centre well enough -- so nines carry their own weight here rather than
+    waiting on full rounds. Requiring full rounds would leave a golfer who
+    mostly plays nine holes with no figure at all.
     """
-    seven_and_nines = full(EIGHT[:-1]) + [Played(8.0, is_nine=True)] * 5
+    seven_and_one = full(EIGHT[:-1]) + [Played(8.0, is_nine=True)]
 
-    assert benchmarks(seven_and_nines)[-1].typical is None
-    assert benchmarks(seven_and_nines)[-1].rounds_until_benchmarks == 1
+    assert benchmarks(seven_and_one + [Played(20.0)])[-1].typical is not None
+    assert benchmarks(seven_and_one)[-1].rounds_until_benchmarks == 1
+
+
+def test_a_golfer_who_only_plays_nines_still_gets_both_figures():
+    """The case the old full-rounds-only rule shut out entirely."""
+    only_nines = [Played(7.0 + 0.4 * i, is_nine=True) for i in range(MINIMUM_ROUNDS)]
+
+    graded = benchmarks(only_nines + [Played(8.0, is_nine=True)])[-1]
+
+    assert graded.typical is not None
+    assert graded.potential is not None
+    assert graded.potential < graded.typical
+    assert graded.rounds_of_history == MINIMUM_ROUNDS
+
+
+def test_the_pivot_uses_nines_as_well_as_full_rounds():
+    """Otherwise the centre would ignore most of a nine-heavy golfer's golf.
+
+    Two windows with the same eighteens but very different nines must produce
+    different figures -- the nines are informing the centre, not just riding on
+    one derived from the eighteens.
+    """
+    good_nines = full(EIGHT[:4]) + [Played(4.0, is_nine=True)] * 4
+    bad_nines = full(EIGHT[:4]) + [Played(12.0, is_nine=True)] * 4
+
+    assert (
+        benchmarks(good_nines + [Played(20.0)])[-1].typical
+        < benchmarks(bad_nines + [Played(20.0)])[-1].typical
+    )
 
 
 def test_a_nine_joins_the_population_once_there_is_a_pivot():
@@ -391,23 +421,20 @@ def test_a_nine_is_folded_in_at_its_converted_value():
     )
 
 
-def test_the_pivot_comes_from_full_rounds_only():
-    """Otherwise the conversion would calibrate against its own output.
+def test_the_pivot_is_stable_against_its_own_output():
+    """The conversion must not calibrate against values it produced.
 
-    Two series with identical eighteens but different nines must produce the
-    same pivot, so the nines land where their own quality puts them rather
-    than dragging the reference point with them.
+    The pivot is computed once from the raw window -- full rounds as they are,
+    nines doubled -- and then used. There is no feedback loop, so adding copies
+    of the same nine moves the median of the population without each copy
+    landing somewhere different.
     """
-    a = benchmarks(full(EIGHT) + [Played(2.0, is_nine=True), Played(20.0)])[-1]
-    b = benchmarks(full(EIGHT) + [Played(2.0, is_nine=True)] * 4 + [Played(20.0)])[-1]
+    one = benchmarks(full(EIGHT) + [Played(2.0, is_nine=True), Played(20.0)])[-1]
+    four = benchmarks(full(EIGHT) + [Played(2.0, is_nine=True)] * 4 + [Played(20.0)])[-1]
 
-    pivot = quantile(EIGHT, TYPICAL_QUANTILE)
-    converted = eighteen_from_nine(2.0, pivot)
-
-    # Four copies of the same converted value pull the median further, but each
-    # copy sits at the same place, computed from the same pivot.
-    assert a.typical > b.typical
-    assert min(EIGHT + [converted]) == pytest.approx(converted)
+    # More copies of a strong nine pull typical further down, monotonically.
+    assert four.typical < one.typical
+    assert four.rounds_of_history == one.rounds_of_history + 3
 
 
 def test_a_nine_can_itself_be_graded():

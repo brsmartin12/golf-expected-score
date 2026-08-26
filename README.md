@@ -145,7 +145,8 @@ curl -X POST http://127.0.0.1:8000/rounds \
 ```
 
 `to_typical` and `to_potential` read the way a scorecard does: negative is
-better. Both are null until there are eight earlier full rounds to draw on, and
+better. Both are null until there are eight earlier rounds to draw on — nines
+count the same as eighteens — and
 `rounds_until_benchmarks` counts down to that.
 
 Nine-hole rounds carry `"nine": "front"` or `"back"` and are graded on that

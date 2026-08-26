@@ -588,11 +588,33 @@ labelled *not rated*, with a prompt to add them.
 run through that nine's rating, so the card says *"your typical back nine here
 is 38.4"* — never half of an eighteen dressed up as a full round.
 
-**One real limit.** The conversion pivots on the golfer's own median, so the
-eight-round minimum counts *full rounds only*. Someone with seven eighteens and
-a pile of nines has no benchmark and no way to earn one from nines alone; there
-is nothing to calibrate the spread against. The countdown says "full rounds" for
-that reason.
+**Nines carry their own weight.** The conversion pivots on the golfer's own
+centre, and the first version of this drew that centre from full rounds only —
+which quietly shut out the golfer the feature exists for. At a 75% nine share,
+only one golfer in ten ever accumulates eight eighteens inside a 20-round
+window; at 100%, none do.
+
+The pivot does not need full rounds. It is estimating a *centre*, not a spread,
+and doubling a nine's median estimates an eighteen's to within about 0.09
+strokes. (It undershoots slightly because a sum of two nines is less skewed
+than one nine, so doubling the median of the more-skewed thing lands low.)
+Measured over 4,000 golfers per case:
+
+| Nines | Pivot from full rounds only | Pivot from everything |
+|---:|---|---|
+| 25% | typ RMSE 0.817, 100% get a figure | 0.827, 100% |
+| 50% | 0.869, **86%** | 0.888, **100%** |
+| 75% | 0.819, **10%** | 0.973, **100%** |
+| 100% | — , **0%** | 1.040, **100%** |
+
+Free up to a 50% share — potential is marginally *better* — and past that it is
+the difference between a usable figure and none. So the eight-round minimum
+counts rounds of any length, and a golfer who only ever plays nine holes gets
+both figures.
+
+**The limit that does remain** is the ratings, not the maths: a nine from a tee
+whose nine-hole figures are missing cannot be rated at all, and no amount of
+history fixes that. Enter them once per tee.
 
 ## Tier 3 — Current form (the headline)
 

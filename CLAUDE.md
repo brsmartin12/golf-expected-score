@@ -70,7 +70,8 @@ understandable steps over large one-shot generations.
   against that nine's own published Course Rating and Slope, then folded onto
   the 18-hole scale with a spread correction — see `golf/scoring.py`, and the
   section in `ROADMAP.md` for why doubling and the WHS's own method both distort
-  potential.
+  potential. Nines count toward the round minimum exactly like eighteens: a
+  golfer who only ever plays nine holes still gets both figures.
 - **Multi-user from the schema up.** This is for the developer *and golf
   friends*, so `user_id` exists from the first table, even before auth ships.
   Groups themselves are *additive* — two new tables, no changes to existing
