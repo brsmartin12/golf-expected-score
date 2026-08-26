@@ -191,6 +191,12 @@ later and nothing needs moving.
   After changing a model, run `alembic revision --autogenerate -m "..."`, read
   what it wrote, and commit it with the model change. `tests/test_migrations.py`
   fails if the two ever disagree.
+- **The app's index is not GHIN's and must never be labelled one.** We take
+  gross scores; GHIN caps each hole at net double bogey, which runs our figure
+  about 1–1.5 strokes worse on identical rounds. That bias is systematic, so it
+  cancels in every internal comparison the app actually makes. Show the official
+  figure from `handicap_snapshots` alongside ours, and use the official one for
+  the net match calculator. See `ROADMAP.md`.
 - **Store raw inputs; derive everything else on read.** Differentials, course
   handicaps and potential scores are computed, never persisted as the source of
   truth — otherwise a formula fix leaves the database disagreeing with the code.

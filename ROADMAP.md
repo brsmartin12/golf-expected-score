@@ -288,6 +288,75 @@ Notes on the shape:
   data we have deliberately chosen not to collect. Fine for personal tracking — worth
   stating plainly rather than pretending the number is official.
 
+## The app's index will not match GHIN, and should not try
+
+**Decision: compute our own number, name it as ours, and show the official one
+beside it when it is known.** Do not chase agreement with GHIN.
+
+### Why agreement is not reachable
+
+The largest gap is **Adjusted Gross Score**. GHIN caps every hole at net double
+bogey — par + 2 + strokes received on that hole — before computing a
+differential. This app takes the gross score, because it deliberately does not
+collect hole scores, and net double bogey cannot be applied without them.
+
+Simulated over 20,000 rounds per player:
+
+| Player      | Gross | Adjusted | Lost to the cap | Rounds affected |
+| ----------- | ----- | -------- | --------------- | --------------- |
+| 5 handicap  | 86.0  | 84.9     | 1.12            | 52%             |
+| 10 handicap | 92.4  | 91.0     | 1.42            | 61%             |
+| 18 handicap | 101.0 | 99.7     | 1.34            | 55%             |
+
+A stroke of gross score is 113/slope of a differential, so on a slope-130 course
+each stroke lost to the cap is about 0.87 of a differential point — and an index
+averages eight of them, so the bias carries through roughly 1:1. **Our figure
+runs about 1 to 1.5 strokes worse than GHIN on identical rounds**, systematically
+and always in the same direction.
+
+Smaller sources on top of that: rounds posted to one and not the other, PCC
+(usually 0 but not always), the low-index safeguards and exceptional-score
+reduction, and nine-hole combining.
+
+### Why it matters far less than it looks
+
+**GHIN does not use a longer period either.** The WHS index is the best 8 of the
+**last 20** differentials — 2019's rounds are not in it. So the populations can
+converge, and after a 30-round backfill they largely have. "Their GHIN was built
+over years" is true of the account, not of the calculation.
+
+**Every headline number in this app is an internal comparison, so a consistent
+bias cancels:**
+
+- *typical vs potential* — both computed from the same differentials
+- *form delta* — recent against the player's own baseline; no index appears at all
+- *course fit* — per-course against the same player's overall; biased on both sides
+- *round percentile* — a rank within the player's own rounds
+
+The bias corrupts exactly one thing: a number labelled "handicap" sitting next
+to a different number in the GHIN app. That is a naming problem, not a maths
+problem — the same lesson as renaming "expected" to "potential".
+
+### What follows
+
+1. **Never label the computed figure a Handicap Index.** It is the app's own
+   number, from what has been logged here. Getting the name right removes most
+   of the problem.
+2. **`handicap_snapshots` holds the official figure** when the golfer enters it.
+   Show both, with the reason they differ, rather than hiding one.
+3. **The score field accepts the Adjusted Gross Score** when it is known. GHIN
+   shows it after posting, so anyone posting anyway can enter 91 instead of 92 —
+   a label change that removes most of the 1.4-stroke bias for free. Gross stays
+   acceptable; the field should not become a chore.
+4. **The net match calculator uses the official index only.** It is the one place
+   absolute accuracy beats internal consistency, because somebody is receiving
+   strokes and a biased figure makes the match unfair.
+
+Worth noting this is not a shortcoming peculiar to this app: every golf app that
+is not the handicap authority computes an unofficial figure and has exactly this
+gap. The difference available to us is being explicit about it rather than
+showing a number and hoping nobody cross-checks.
+
 ## Tier 2 — Analytics that need only a score column
 
 All of these are pure functions living beside `handicap.py` in `backend/golf/`, with
