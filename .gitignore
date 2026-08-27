@@ -15,3 +15,8 @@ dist/
 
 # OS
 .DS_Store
+
+# Database dumps. These hold real scores, and a restore is only ever wanted from
+# a file you deliberately kept -- not one that rode into the repo by accident.
+backup-*.sql
+*.dump
