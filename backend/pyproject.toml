@@ -37,3 +37,10 @@ include = ["golf*", "api*", "db*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Puts backend/ on sys.path, which is what makes `from tests.conftest import
+# requires_database` resolve. Without it the bare `pytest` command fails to
+# collect four modules, while `python -m pytest` works -- because the module
+# form silently adds the current directory and the executable does not. That
+# discrepancy hid the problem for a while: the tests passed for anyone running
+# it one way and failed for anyone following the README.
+pythonpath = ["."]

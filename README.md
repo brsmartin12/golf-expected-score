@@ -21,9 +21,42 @@ this is going and why.
 Partway through **step 5**: the calculation core, a FastAPI wrapper, a migrated
 database, and a three-tab React app that logs rounds and grades them.
 
+## Quick start
+
+Needs Docker, Python 3.11+ and Node. Once, after cloning:
+
+```bash
+make setup      # virtualenv, backend deps, frontend deps
+make start      # Postgres up, migrations applied
+```
+
+Then two terminals, both left running:
+
+```bash
+make api        # backend  -> http://127.0.0.1:8000   (/docs for the API)
+make web        # frontend -> http://localhost:5173
+```
+
+Open <http://localhost:5173>, add a course with its tees, and log a round.
+
+`make` on its own lists every target. Nothing is hidden — each one runs the
+same commands the sections below explain, and `make -n <target>` prints what it
+would do without doing it. What the Makefile really provides is the *order*,
+which is the part that was easy to get wrong.
+
+Day to day:
+
+```bash
+make test       # the test suite
+make migrate    # after pulling a change to the models
+make backup     # snapshot the database before anything risky
+make stop       # stop Postgres, keeping the data
+```
+
 ## Layout
 
 ```
+Makefile                every command you need; `make` lists them
 METHOD.md               how every number is worked out, and what it costs
 ROADMAP.md              where this is going, and why
 backend/
@@ -44,25 +77,37 @@ frontend/
 `api` imports `golf`; `golf` imports nothing from `api`. The math stays testable
 without a web server.
 
-## Setup
+## Setup, the long way
+
+`make setup` runs exactly this, and is what you should use. It is spelled out
+here because the pieces are worth recognising:
 
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+
+cd ../frontend
+npm install
 ```
 
 `pip install -e .` is an *editable* install: it points Python at this source
 directory rather than copying files, so `import golf` works from anywhere in the
 project and your edits take effect without reinstalling.
 
+The `make` targets call `backend/.venv/bin/...` directly, so you never have to
+activate anything. Forgetting to activate a virtualenv is the most common way
+this goes wrong, and it fails confusingly — the commands exist, they just belong
+to a different Python.
+
 ## Running the tests
 
 ```bash
-cd backend
-pytest -v          # -v names each case, so the suite reads as a spec
+make test          # or, from backend/: pytest -v
 ```
+
+`-v` names each case, so the suite reads as a spec.
 
 Tests use their own `<name>_test` database, created automatically, so a test run
 never touches data you have entered while using the app. Database tests skip
@@ -115,56 +160,6 @@ Read what autogenerate writes before committing it. It is reliable for columns,
 types and indexes, and blind to intent — a renamed column is emitted as a drop
 plus an add, which would throw the data away. `tests/test_migrations.py` fails
 if the models and the migrations ever disagree.
-
-### Backups
-
-Your rounds live in one Docker volume on one machine. There is no other copy,
-and the history came from 18Birdies, which has no export — so losing it means
-re-entering every round by hand. `docker compose down -v` is one character away
-from `docker compose down`.
-
-Take a snapshot before anything that touches the database, and before a long
-data-entry session:
-
-```bash
-docker compose exec -T db pg_dump -U golf golf > backup-$(date +%F).sql
-```
-
-**Then look at the file.** A dump of a database that was not running still
-exits successfully and still creates a file — a few kilobytes of nothing. That
-is the standard way a backup turns out to be worthless:
-
-```bash
-wc -l backup-*.sql        # a real one is hundreds of lines
-```
-
-To restore, into an **empty** database. A plain dump contains `CREATE TABLE`
-statements, so restoring over existing tables fails part-way and leaves a mess:
-
-```bash
-docker compose down -v && docker compose up -d --wait
-docker compose exec -T db psql -U golf -d golf < backup-2026-08-27.sql
-```
-
-`--wait` matters: `up -d` returns as soon as the container starts, which is
-several seconds before Postgres accepts connections, and a restore fired into
-that gap fails with "connection refused". The healthcheck in
-`docker-compose.yml` is what `--wait` waits for.
-
-The dump carries the `alembic_version` row with it, so a restored database
-knows which migration it is on and `alembic upgrade head` works immediately.
-Nothing needs stamping.
-
-Why `pg_dump` and not something in this repo: it is complete, it is exact, and
-it needs no maintenance. A hand-written exporter would be a partial
-reimplementation of it that has to be updated with every migration or quietly
-start dropping columns. There *is* a case for a JSON export — readable, easy to
-diff, good for fixtures, and eventually a real "export my rounds" feature once
-other people's data is in here — but that is a different job from not losing
-anything, and it should not be confused for one.
-
-Once deployed (step 9), the hosting provider takes automated backups and this
-stops being a single-machine problem.
 
 ## Running the API
 
@@ -228,6 +223,56 @@ comes back graded in the same response.
 The backend URL defaults to `http://127.0.0.1:8000`. To point somewhere else,
 copy `.env.example` to `.env` and set `VITE_API_URL` — that's the hook step 9
 uses to aim the deployed frontend at the deployed backend.
+
+## Backups
+
+Your rounds live in one Docker volume on one machine. There is no other copy,
+and the history came from 18Birdies, which has no export — so losing it means
+re-entering every round by hand. `docker compose down -v` is one character away
+from `docker compose down`.
+
+Take a snapshot before anything that touches the database, and before a long
+data-entry session:
+
+```bash
+docker compose exec -T db pg_dump -U golf golf > backup-$(date +%F).sql
+```
+
+**Then look at the file.** A dump of a database that was not running still
+exits successfully and still creates a file — a few kilobytes of nothing. That
+is the standard way a backup turns out to be worthless:
+
+```bash
+wc -l backup-*.sql        # a real one is hundreds of lines
+```
+
+To restore, into an **empty** database. A plain dump contains `CREATE TABLE`
+statements, so restoring over existing tables fails part-way and leaves a mess:
+
+```bash
+docker compose down -v && docker compose up -d --wait
+docker compose exec -T db psql -U golf -d golf < backup-2026-08-27.sql
+```
+
+`--wait` matters: `up -d` returns as soon as the container starts, which is
+several seconds before Postgres accepts connections, and a restore fired into
+that gap fails with "connection refused". The healthcheck in
+`docker-compose.yml` is what `--wait` waits for.
+
+The dump carries the `alembic_version` row with it, so a restored database
+knows which migration it is on and `alembic upgrade head` works immediately.
+Nothing needs stamping.
+
+Why `pg_dump` and not something in this repo: it is complete, it is exact, and
+it needs no maintenance. A hand-written exporter would be a partial
+reimplementation of it that has to be updated with every migration or quietly
+start dropping columns. There *is* a case for a JSON export — readable, easy to
+diff, good for fixtures, and eventually a real "export my rounds" feature once
+other people's data is in here — but that is a different job from not losing
+anything, and it should not be confused for one.
+
+Once deployed (step 9), the hosting provider takes automated backups and this
+stops being a single-machine problem.
 
 ## Using the math directly
 
