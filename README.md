@@ -73,6 +73,7 @@ with an explanatory message when Postgres is not running.
 ```bash
 docker compose up -d      # start Postgres 16 on :5432
 docker compose down       # stop it, keeping the data
+docker compose down -v    # stop it and DELETE the data — see Backups below
 ```
 
 The app finds it through `DATABASE_URL`, which defaults to the compose setup, so
@@ -114,6 +115,56 @@ Read what autogenerate writes before committing it. It is reliable for columns,
 types and indexes, and blind to intent — a renamed column is emitted as a drop
 plus an add, which would throw the data away. `tests/test_migrations.py` fails
 if the models and the migrations ever disagree.
+
+### Backups
+
+Your rounds live in one Docker volume on one machine. There is no other copy,
+and the history came from 18Birdies, which has no export — so losing it means
+re-entering every round by hand. `docker compose down -v` is one character away
+from `docker compose down`.
+
+Take a snapshot before anything that touches the database, and before a long
+data-entry session:
+
+```bash
+docker compose exec -T db pg_dump -U golf golf > backup-$(date +%F).sql
+```
+
+**Then look at the file.** A dump of a database that was not running still
+exits successfully and still creates a file — a few kilobytes of nothing. That
+is the standard way a backup turns out to be worthless:
+
+```bash
+wc -l backup-*.sql        # a real one is hundreds of lines
+```
+
+To restore, into an **empty** database. A plain dump contains `CREATE TABLE`
+statements, so restoring over existing tables fails part-way and leaves a mess:
+
+```bash
+docker compose down -v && docker compose up -d --wait
+docker compose exec -T db psql -U golf -d golf < backup-2026-08-27.sql
+```
+
+`--wait` matters: `up -d` returns as soon as the container starts, which is
+several seconds before Postgres accepts connections, and a restore fired into
+that gap fails with "connection refused". The healthcheck in
+`docker-compose.yml` is what `--wait` waits for.
+
+The dump carries the `alembic_version` row with it, so a restored database
+knows which migration it is on and `alembic upgrade head` works immediately.
+Nothing needs stamping.
+
+Why `pg_dump` and not something in this repo: it is complete, it is exact, and
+it needs no maintenance. A hand-written exporter would be a partial
+reimplementation of it that has to be updated with every migration or quietly
+start dropping columns. There *is* a case for a JSON export — readable, easy to
+diff, good for fixtures, and eventually a real "export my rounds" feature once
+other people's data is in here — but that is a different job from not losing
+anything, and it should not be confused for one.
+
+Once deployed (step 9), the hosting provider takes automated backups and this
+stops being a single-machine problem.
 
 ## Running the API
 
