@@ -513,7 +513,74 @@ existing math: framework-free, no I/O, provable.
   units golfers actually think in.
 - **Pre-round target card.** For today's course and tee: your typical score, your
   potential score, the score that would move your typical down, and your best
-  round here. A reason to open the app *before* playing, not only after.
+  round here. A reason to open the app *before* playing, not only after. It has
+  its own section below, because it turned out to be a bigger idea than a screen.
+
+## The two cards are one card
+
+The pre-round and post-round moments were described above as two screens. On
+closer inspection they are the same screen with one field's difference, and
+noticing that changes what gets built.
+
+Both answer *"what is a round here worth for me?"* Both lead with **typical**,
+carry **potential** beside it, and render both onto the tee in front of you.
+The post-round version simply has one extra input — the score you just shot —
+and the two differ only in what they say *around* the numbers:
+
+| | Before | After |
+|---|---|---|
+| The numbers | typical + potential, on this tee | identical |
+| The extra | *"shoot 84 and your typical drops to 88.9"* | *"that was your 4th best round here"* |
+| Tone | a target | a verdict |
+
+So this is **one component in two modes**, not two screens. The API side was
+already anticipated in "Two moments, not one app" above — the single
+*"me, at this tee, today"* bundle — and this is the frontend half of the same
+observation. `VerdictCard` is most of the pre-round card already; take the score
+away and swap the closing line.
+
+That makes the pre-round moment far cheaper than its absence from the app
+suggests, which matters because it has been quietly deprioritised once already.
+
+**The third tab is the target card.** The app currently has Log, Rounds and an
+empty Group placeholder, so the navigation reserves a third of itself for a
+feature at step 10 while half the product thesis has nowhere to live. Group
+moves in when there is a group; until then that slot is the pre-round card.
+
+**It is not blocked on course history.** Typical and potential come from your
+differentials *anywhere*, rendered onto whatever tee you are standing on. Eight
+rounds total is the only requirement, so after the backfill this works at every
+course immediately — including ones never played, which is arguably the best
+case: *"never been here, what should I expect off the blues?"*
+
+### Per-course typical and potential
+
+On top of the overall pair, show the same two numbers **computed from your
+rounds at this course**, when there are any. *"You usually shoot 88. Here, you
+usually shoot 91."* That gap is the whole story, and it supports the callout
+this app was originally imagined around — *"this is a hard course for you"*.
+
+Two design notes, and only two, because the maths belongs with Tier 4:
+
+**Never gate the number.** Tier 4 currently says to withhold a per-course figure
+until the data supports it — *"not enough data yet, 4 more rounds here."* That is
+right for a *claim* and wrong for a *number*, and the two got conflated. Shrunk
+toward your overall typical by `n/(n+k)`, a per-course figure is defined from the
+very first round: at n=1 it is essentially your overall typical, which is the
+correct answer when there is no course-specific evidence, and it sharpens as
+rounds accumulate. There is never a reason to show a countdown instead. Features
+before total accuracy — and here that costs no accuracy at all, because
+shrinkage *is* the honest answer at low n rather than a shortcut past it.
+
+**A number is not a claim.** *"You usually shoot 91 here"* is a figure, always
+shown. *"This course is hard for you"* is an assertion about a difference, and
+that one still waits for the interval to exclude zero. Keeping the two on
+separate thresholds is what lets the screen always have something to say without
+ever saying something it cannot support.
+
+Naming follows the rest of the app: **typical here**, **potential here**. Not
+"expected" — that word is reserved territory for a reason documented in the
+decisions table.
 
 ## Nine-hole rounds
 
@@ -735,6 +802,10 @@ rather than merely fun.
 - **Only label a course a good or bad fit when its interval excludes zero.**
 - Otherwise say **"not enough data yet — 4 more rounds here."** Honest, and it hands
   the user a concrete reason to keep logging rounds.
+- **That gate is on the label, not on the figure.** A shrunk per-course typical is
+  defined from the first round — it simply sits near your overall typical until the
+  course has earned the right to move it. Show it always; withhold only the claim.
+  See "Per-course typical and potential" above.
 - Apply the same treatment **per tee**, and optionally grouped by course length or
   rating band — which starts to answer *why* a course fits, not just *that* it does.
 
