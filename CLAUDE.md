@@ -145,6 +145,11 @@ understandable steps over large one-shot generations.
    game" is only claimed when the data supports it — and says "need 4 more
    rounds here" when it doesn't.
 9. Deploy: backend + DB to a managed platform, frontend to static hosting.
+   **Deploy privately for one golfer first** — the app cannot do the thing it is
+   for while it only runs on a laptop, and three small things block a first
+   deploy today (hardcoded CORS origins, the shared `get_current_user` row, and
+   nothing running migrations on deploy). See "What production means for this
+   app" in `ROADMAP.md`.
    Wire the frontend to the deployed backend URL via an environment variable.
    Packaging and hosting are separate choices and most platforms take a
    Dockerfile — see "Deployment, and keeping dev and prod the same thing" in

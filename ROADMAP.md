@@ -1314,6 +1314,126 @@ rounds posted while in a group are visible to that group, or the leaderboard
 openly reports how many rounds each member has withheld. Silently allowing
 hidden rounds is the one option that is actually dishonest.
 
+## What production means for this app
+
+Production architecture is not a set of technologies. It is a set of concerns
+that arrive in a predictable order as the number of people depending on you
+grows, and most of what looks like "production architecture" elsewhere is a
+response to problems this app will not have for years. Some of it is a response
+to *organisational* scale rather than traffic: forty engineers need service
+boundaries so they can deploy independently, one engineer needs a monolith.
+
+### The order things actually bite
+
+**Deploying at all — "it runs without my laptop."** Something hosts it. Config
+comes from environment variables, which is already the case (`DATABASE_URL`,
+`VITE_API_URL`). Secrets are not in the repo. HTTPS. Managed Postgres with real
+backups. Deploying is not a ceremony.
+
+**Auth and groups — "other people's data is in here."** The blast radius
+changes: a mistake now costs someone else data they cannot retype. Errors have
+to reach you, because nobody is watching a terminal. Migrations run against real
+rows, so a bad one is an outage rather than an inconvenience. A friend's bug
+report has to be reproducible without their phone.
+
+**Beyond a handful — "I cannot personally watch it."** Searchable logs, error
+tracking, a few metrics. Tests running before deploy rather than after. A safe
+way to rehearse a migration. Rate limiting, because public means abuse.
+
+**Actual scale.** Caching, read replicas, background jobs, horizontal scaling.
+Much further out than instinct suggests — see below.
+
+### The scale reality check
+
+A single FastAPI process and one Postgres instance will comfortably serve
+thousands of golfers. The workload is tiny: a few writes per user per *week*,
+reads over a twenty-row window, no long queries, no fan-out. The smallest paid
+tier of anything would not notice.
+
+The bottleneck will not be compute. It will be attention — the operational
+surface signed up for. Every piece of architecture added before it is needed
+costs the one genuinely scarce resource.
+
+### Where thought is worth spending now
+
+Some decisions are cheap to reverse and some are not. Only the second column
+deserves thought this early:
+
+| Cheap to change later | Expensive to change later |
+|---|---|
+| Hosting provider | The data model |
+| Containerised or not | Auth and identity model |
+| Adding caching, queues | Whether data is per-user or shared |
+| Frontend framework details | Anything users' URLs or IDs depend on |
+
+The expensive column is mostly already right, and not by accident: `user_id` in
+the schema before auth existed, Alembic from the first table, derive-on-read so
+a formula fix never leaves the database disagreeing with the code. Those would
+have been brutal to retrofit.
+
+### Day one, concretely
+
+Three things and a domain:
+
+| Piece | What it is |
+|---|---|
+| Database | Managed Postgres, smallest tier, automated backups **verified on** |
+| Backend | One container running uvicorn. One instance. No load balancer of your own — the platform is the front door |
+| Frontend | Static files on a CDN. No server |
+
+Deliberately absent: Redis, queues, workers, Kubernetes, autoscaling, a second
+service of any kind. None of them solve a problem this app has.
+
+**Three things in the repo block a first deploy today**, and all three are
+small:
+
+1. **CORS is hardcoded to localhost.** `api/main.py` allows four
+   `localhost` origins. A browser on a real domain would have every request
+   refused. Needs to come from an environment variable.
+2. **`get_current_user` returns one shared row.** It looks up a fixed
+   `DEV_USER_EMAIL` and creates it on demand. Deployed to a public URL as-is,
+   *every visitor shares one account* — same rounds, and each able to delete the
+   others'. That is a data-exposure bug the moment the URL is reachable.
+3. **Nothing runs migrations on deploy.** `alembic upgrade head` exists only as
+   a manual step in the Makefile, so a fresh production database would have no
+   tables. Needs to be a release command or run at start-up.
+
+### Deploy for yourself first
+
+Point 2 above looks like it forces auth before deploying. It does not, and the
+sequencing matters:
+
+**The app cannot currently do the thing it is for.** "Both moments happen at
+the course on a phone" is the premise of this whole roadmap, and it is
+unachievable while the app only runs on a laptop. Deploying privately — for one
+golfer, no auth, not linked anywhere — turns it from a project into something
+actually used at a golf course. That is a real milestone, not a rehearsal.
+
+So: deploy private, then add auth, then invite people. Private means the URL is
+not shared and access is restricted at the platform level rather than left open
+with a shared account behind it.
+
+### Open question: who owns a course
+
+`courses` and `tees` carry no `user_id`. They are global, which is right — a
+golf course is an objective fact and duplicating Pine Hills per user would be
+worse. But it is a governance question that has never been answered, and it
+becomes real with a second user:
+
+- Two people add "Pine Hills, Austin, TX". The second gets a 409. Do they get
+  to use the first one's?  (Currently yes.)
+- Whoever typed the ratings first, *everyone inherits* — including their typos.
+  One wrong slope silently shifts every other golfer's figures at that course.
+- `POST /courses/{id}/tees` lets any user add tees to any course.
+
+This is what architecture looks like in practice: not orchestration, but "who
+owns this row and what happens when two people want it." Easy to settle now,
+painful once there is data.
+
+It is also the strongest argument for the automatic course lookup in Tier 6.
+Authoritative ratings from the USGA sidestep the governance problem rather than
+solving it — nobody owns a fact.
+
 ## Deployment, and keeping dev and prod the same thing
 
 Not decided yet, deliberately — but the shape of the decision is worth writing
