@@ -33,12 +33,16 @@ export default function LogRound() {
     };
   }, []);
 
-  function handleCourseAdded(course) {
-    setCourses((previous) => [...(previous ?? []), course].sort((a, b) =>
-      a.name.localeCompare(b.name)));
+  function handleCourseSaved(course, teeId) {
+    // Replace when the course is already known — adding a tee returns the whole
+    // course, not just the new one — and append when it is new.
+    setCourses((previous) => {
+      const rest = (previous ?? []).filter((c) => c.id !== course.id);
+      return [...rest, course].sort((a, b) => a.name.localeCompare(b.name));
+    });
     setIsAdding(false);
-    // Select the tee that was just created, so entry can continue immediately.
-    if (course.tees.length > 0) setField("teeId", String(course.tees[0].id));
+    // Select the tee that was just created, so entry continues on it.
+    if (teeId) setField("teeId", String(teeId));
   }
 
   // One flat list of tees: a tee is what a round is actually played from, and
@@ -90,7 +94,9 @@ export default function LogRound() {
         </div>
       )}
 
-      {isAdding && <AddCourse onAdded={handleCourseAdded} />}
+      {isAdding && (
+        <AddCourse courses={courses ?? []} onSaved={handleCourseSaved} />
+      )}
 
       {/* Above the form on purpose. Saved below it, the verdict landed off the
           bottom of a phone screen — the app's headline moment, out of sight.
@@ -195,7 +201,7 @@ export default function LogRound() {
             type="button"
             onClick={() => setIsAdding(true)}
           >
-            Add a different course
+            Add a course or tee
           </button>
         </form>
       )}

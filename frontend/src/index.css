@@ -320,7 +320,11 @@ body {
   width: 7rem;
 }
 
-.select {
+/* `.field select` as well as `.select`: a bare select inside a field should
+   look right without remembering the class, the way `.field input` already
+   does. Forgetting it produced one unstyled white dropdown on a dark form. */
+.select,
+.field select {
   width: 100%;
   min-width: 0;
   min-height: var(--tap);
@@ -340,7 +344,8 @@ body {
   padding-right: var(--space-8);
 }
 
-.select:focus-visible {
+.select:focus-visible,
+.field select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
