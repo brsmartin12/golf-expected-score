@@ -182,6 +182,7 @@ from the type hints where you can fire real requests at the endpoints.
 | GET    | `/health/db`      | Readiness check — can the app reach Postgres?                  |
 | GET    | `/courses`        | Courses with their tees — what a course picker renders          |
 | POST   | `/courses`        | Add a course and its tees together                              |
+| POST   | `/courses/{id}/tees` | Add tees to a course that already exists                     |
 | GET    | `/rounds`         | Your rounds, most recently *played* first                       |
 | POST   | `/rounds`         | Log a round and get the verdict in the same response            |
 

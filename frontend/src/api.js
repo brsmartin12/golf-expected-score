@@ -97,32 +97,51 @@ export function fetchCourses() {
   return getJson("/courses");
 }
 
+/**
+ * One tee, in the shape the API expects.
+ *
+ * Shared by createCourse and addTees on purpose: the nine-hole ratings were
+ * silently dropped once already by a hand-written field list that fell out of
+ * step, and two copies of this would be two chances to repeat it.
+ */
+function teePayload(tee) {
+  return {
+    name: tee.name,
+    par: tee.par,
+    course_rating: tee.courseRating,
+    slope_rating: tee.slopeRating,
+    // Omitted when blank rather than sent as null, so the backend's
+    // paired-or-absent check sees a clean absence.
+    ...(tee.frontCourseRating === null ? {} : {
+      front_course_rating: tee.frontCourseRating,
+      front_slope_rating: tee.frontSlopeRating,
+    }),
+    ...(tee.backCourseRating === null ? {} : {
+      back_course_rating: tee.backCourseRating,
+      back_slope_rating: tee.backSlopeRating,
+    }),
+  };
+}
+
 /** Add a course and its tees together. A course with no tees is useless. */
 export function createCourse({ name, city, state, tee }) {
   return postJson("/courses", {
     name,
     city: city || null,
     state: state || null,
-    tees: [
-      {
-        name: tee.name,
-        par: tee.par,
-        course_rating: tee.courseRating,
-        slope_rating: tee.slopeRating,
-        // Each nine is rated separately by the USGA. Omitted when blank rather
-        // than sent as null, so the backend's paired-or-absent check sees a
-        // clean absence.
-        ...(tee.frontCourseRating === null ? {} : {
-          front_course_rating: tee.frontCourseRating,
-          front_slope_rating: tee.frontSlopeRating,
-        }),
-        ...(tee.backCourseRating === null ? {} : {
-          back_course_rating: tee.backCourseRating,
-          back_slope_rating: tee.backSlopeRating,
-        }),
-      },
-    ],
+    tees: [teePayload(tee)],
   });
+}
+
+/**
+ * Add tees to a course that already exists.
+ *
+ * Separate from createCourse because a course is unique on name and location:
+ * re-posting it to attach another tee is a 409, not an update. Returns the whole
+ * course, so a caller replaces its copy rather than merging.
+ */
+export function addTees(courseId, tees) {
+  return postJson(`/courses/${courseId}/tees`, tees.map(teePayload));
 }
 
 /**

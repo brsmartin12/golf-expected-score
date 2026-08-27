@@ -148,6 +148,116 @@ def test_a_tee_with_an_illegal_slope_is_rejected(client):
 
 
 # ---------------------------------------------------------------------------
+# Adding tees to a course that already exists
+# ---------------------------------------------------------------------------
+
+
+def test_a_tee_can_be_added_to_an_existing_course(client):
+    """The second set of tees you ever play at a course.
+
+    Courses are unique on name and location and were creatable only with their
+    tees attached, so this was unreachable -- you would meet it halfway through
+    a backfill with no way past.
+    """
+    course = add_course(client, tees=FLAT_TEE)
+
+    response = client.post(
+        f"/courses/{course['id']}/tees",
+        json=[{"name": "White", "par": 72, "course_rating": 69.8, "slope_rating": 124}],
+    )
+
+    assert response.status_code == 201
+    assert sorted(t["name"] for t in response.json()["tees"]) == ["Blue", "White"]
+
+
+def test_several_tees_can_be_added_at_once(client):
+    course = add_course(client, tees=FLAT_TEE)
+
+    body = client.post(
+        f"/courses/{course['id']}/tees",
+        json=[
+            {"name": "White", "par": 72, "course_rating": 69.8, "slope_rating": 124},
+            {"name": "Gold", "par": 72, "course_rating": 67.4, "slope_rating": 111},
+        ],
+    ).json()
+
+    assert len(body["tees"]) == 3
+
+
+def test_an_added_tee_keeps_its_nine_hole_ratings(client):
+    """Regression guard. The course route once built each Tee from a hand-written
+    field list, so the nine-hole columns were accepted and then silently dropped
+    before the insert. This route must not repeat that."""
+    course = add_course(client, tees=FLAT_TEE)
+
+    body = client.post(
+        f"/courses/{course['id']}/tees",
+        json=[{
+            "name": "Gold", "par": 72, "course_rating": 67.4, "slope_rating": 111,
+            "front_course_rating": 33.7, "front_slope_rating": 116,
+            "back_course_rating": 33.7, "back_slope_rating": 105,
+        }],
+    ).json()
+
+    gold = next(t for t in body["tees"] if t["name"] == "Gold")
+    assert gold["front_slope_rating"] == 116
+    assert gold["back_slope_rating"] == 105
+
+
+def test_an_added_tee_can_be_played_immediately(client):
+    """The whole point: the round that was blocked now goes in."""
+    course = add_course(client, tees=FLAT_TEE)
+    added = client.post(
+        f"/courses/{course['id']}/tees",
+        json=[{"name": "White", "par": 72, "course_rating": 69.8, "slope_rating": 124}],
+    ).json()
+    white = next(t for t in added["tees"] if t["name"] == "White")
+
+    body = log(client, white["id"], "2025-06-14", 88)
+
+    assert body["tee_name"] == "White"
+    assert body["score_differential"] == pytest.approx(16.6)  # (88 - 69.8) x 113/124
+
+
+def test_a_duplicate_tee_name_at_the_same_course_is_rejected(client):
+    course = add_course(client, tees=FLAT_TEE)
+
+    response = client.post(f"/courses/{course['id']}/tees", json=FLAT_TEE)
+
+    assert response.status_code == 409
+    assert "already has a tee by that name" in response.json()["detail"]
+
+
+def test_the_same_tee_name_at_a_different_course_is_fine(client):
+    """Tee names are unique per course, not globally -- every course has a Blue."""
+    other = add_course(client, name="Riverside", tees=FLAT_TEE)
+
+    response = client.post(f"/courses/{other['id']}/tees",
+                           json=[{"name": "White", "par": 72,
+                                  "course_rating": 69.8, "slope_rating": 124}])
+
+    assert response.status_code == 201
+
+
+def test_adding_a_tee_to_a_course_that_does_not_exist_is_a_404(client):
+    response = client.post("/courses/9999/tees", json=FLAT_TEE)
+
+    assert response.status_code == 404
+
+
+def test_an_added_tee_cannot_store_half_a_nine(client):
+    course = add_course(client, tees=FLAT_TEE)
+
+    response = client.post(
+        f"/courses/{course['id']}/tees",
+        json=[{"name": "Gold", "par": 72, "course_rating": 67.4,
+               "slope_rating": 111, "front_course_rating": 33.7}],
+    )
+
+    assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
 # Rounds
 # ---------------------------------------------------------------------------
 
