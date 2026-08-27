@@ -10,6 +10,7 @@ from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from api.deps import get_current_user
 from api.main import app
@@ -537,3 +538,103 @@ def test_one_golfer_does_not_see_another_golfers_rounds(client, db_session):
     app.dependency_overrides[get_current_user] = lambda: stranger
 
     assert client.get("/rounds").json() == []
+
+
+# ---------------------------------------------------------------------------
+# Deleting a round
+# ---------------------------------------------------------------------------
+
+
+def test_a_round_can_be_deleted(client):
+    """The escape hatch for a mistyped score during a backfill."""
+    tee = add_course(client, tees=FLAT_TEE)["tees"][0]
+    round_ = log(client, tee["id"], "2025-06-14", 88)
+
+    response = client.delete(f"/rounds/{round_['id']}")
+
+    assert response.status_code == 204
+    assert client.get("/rounds").json() == []
+
+
+def test_deleting_regrades_the_rounds_after_it(client):
+    """Nothing derived is stored, so removing a round changes what the later
+    ones were judged against -- automatically, on the next read.
+
+    Nine rounds of history, not eight, so deleting one leaves enough to still
+    produce a figure. At eight the round would simply drop below the minimum,
+    which is the next test.
+    """
+    tee = add_course(client, tees=FLAT_TEE)["tees"][0]
+    log_a_history(client, tee["id"], scores=range(73, 82))   # nine rounds, diffs 1..9
+    graded = log(client, tee["id"], "2025-02-01", 80)
+    # median of 1..9 is the 5th value, 5.0 -> 77.0 on this tee
+    assert graded["typical_score"] == pytest.approx(77.0)
+
+    # Remove the best of them. The median of what is left must move up.
+    listed = client.get("/rounds").json()
+    best = min((r for r in listed if r["id"] != graded["id"]),
+               key=lambda r: r["gross_score"])
+    client.delete(f"/rounds/{best['id']}")
+
+    regraded = next(r for r in client.get("/rounds").json() if r["id"] == graded["id"])
+    assert regraded["rounds_of_history"] == 8
+    # diffs 2..9, median 5.5 -> 77.5
+    assert regraded["typical_score"] == pytest.approx(77.5)
+
+
+def test_deleting_below_the_minimum_withdraws_the_figures(client):
+    """Honest rather than stale: one round short of the minimum there is no
+    median worth showing, so the round goes back to a countdown.
+
+    Sized from MINIMUM_ROUNDS rather than a literal — this test was written
+    when the minimum was eight and quietly stopped testing anything when it
+    became three.
+    """
+    tee = add_course(client, tees=FLAT_TEE)["tees"][0]
+    log_a_history(client, tee["id"], scores=range(73, 73 + MINIMUM_ROUNDS))
+    graded = log(client, tee["id"], "2025-02-01", 80)
+    assert graded["typical_score"] is not None
+    assert graded["rounds_of_history"] == MINIMUM_ROUNDS
+
+    listed = client.get("/rounds").json()
+    victim = next(r for r in listed if r["id"] != graded["id"])
+    client.delete(f"/rounds/{victim['id']}")
+
+    regraded = next(r for r in client.get("/rounds").json() if r["id"] == graded["id"])
+    assert regraded["typical_score"] is None
+    assert regraded["rounds_until_benchmarks"] == 1
+
+
+def test_deleting_a_round_that_does_not_exist_is_a_404(client):
+    assert client.delete("/rounds/9999").status_code == 404
+
+
+def test_one_golfer_cannot_delete_another_golfers_round(client, db_session):
+    """A 404 rather than a 403: 403 would confirm the id exists."""
+    tee = add_course(client, tees=FLAT_TEE)["tees"][0]
+    mine = log(client, tee["id"], "2025-06-14", 88)
+    mine_user_id = db_session.scalars(select(User)).first().id
+
+    stranger = User(email="thief@localhost", display_name="Someone Else")
+    db_session.add(stranger)
+    db_session.flush()
+    app.dependency_overrides[get_current_user] = lambda: stranger
+
+    assert client.delete(f"/rounds/{mine['id']}").status_code == 404
+
+    # And it is still there for its owner. Restoring the override rather than
+    # popping it: popping falls back to the real get_current_user, which resolves
+    # a different user again and would make an empty list look like success.
+    owner = db_session.get(User, mine_user_id)
+    app.dependency_overrides[get_current_user] = lambda: owner
+    assert len(client.get("/rounds").json()) == 1
+
+
+def test_deleting_a_round_leaves_the_tee_alone(client):
+    """A round is not the only thing pointing at a tee."""
+    tee = add_course(client, tees=FLAT_TEE)["tees"][0]
+    round_ = log(client, tee["id"], "2025-06-14", 88)
+
+    client.delete(f"/rounds/{round_['id']}")
+
+    assert client.get("/courses").json()[0]["tees"][0]["id"] == tee["id"]

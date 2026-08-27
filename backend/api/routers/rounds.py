@@ -231,3 +231,35 @@ def create_round(
 
     graded = {m.id: m for m in _read_models(_load_rounds(session, user))}
     return graded[round_.id]
+
+
+@router.delete("/{round_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_round(
+    round_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> None:
+    """Remove a round. The escape hatch for a mistyped score.
+
+    Rounds were append-only, which is fine until a backfill of thirty hand-typed
+    entries -- one wrong score then sits in the history dragging typical, with
+    no way out but hand-written SQL. Delete and retype is enough for that; a
+    full edit form is a bigger thing that can wait for a reason.
+
+    A round belonging to someone else is a 404, not a 403. 403 would confirm the
+    id exists, which is a small leak but a free one to avoid.
+
+    Deleting changes the verdict on every LATER round, because each one is
+    graded against the rounds before it and the population just changed. That
+    happens on its own: nothing derived is stored, so the next read recomputes
+    it. Callers holding a list should refetch rather than splice.
+    """
+    round_ = session.get(Round, round_id)
+    if round_ is None or round_.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No round with id {round_id}.",
+        )
+
+    session.delete(round_)
+    session.commit()

@@ -17,7 +17,7 @@
  */
 import { useEffect, useState } from "react";
 
-import { fetchRounds } from "../api.js";
+import { deleteRound, fetchRounds } from "../api.js";
 
 function formatPlayedOn(iso) {
   const [year, month, day] = iso.split("-").map(Number);
@@ -39,6 +39,10 @@ function toPar(value) {
 export default function Rounds() {
   const [rounds, setRounds] = useState(null);
   const [error, setError] = useState(null);
+  // Which row is asking "are you sure?". Inline rather than a modal: one row is
+  // the whole question, and a dialog over a list loses which row it came from.
+  const [confirming, setConfirming] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +61,24 @@ export default function Rounds() {
       cancelled = true;
     };
   }, []);
+
+  async function remove(id) {
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteRound(id);
+      // Refetch rather than splice. Every round after the deleted one was
+      // graded against a population that just changed, so their verdicts move
+      // too — the server recomputes them, and a local splice would leave stale
+      // numbers on screen. See the note on deleteRound in api.js.
+      setRounds(await fetchRounds());
+      setConfirming(null);
+    } catch (deleteError) {
+      setError(deleteError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <>
@@ -110,6 +132,26 @@ export default function Rounds() {
             // on what this golfer usually shoots, not on their best form.
             const gap = toPar(round.to_typical);
 
+            if (confirming === round.id) {
+              return (
+                <li key={round.id} className="round round--confirming">
+                  <p className="round__ask">
+                    Delete the {round.gross_score} at {round.course_name}?
+                  </p>
+                  <div className="round__answer">
+                    <button className="link-button" type="button" disabled={busy}
+                            onClick={() => setConfirming(null)}>
+                      Cancel
+                    </button>
+                    <button className="button button--danger" type="button"
+                            disabled={busy} onClick={() => remove(round.id)}>
+                      {busy ? "Deleting…" : "Delete"}
+                    </button>
+                  </div>
+                </li>
+              );
+            }
+
             return (
               <li key={round.id} className="round">
                 <div className="round__date">
@@ -141,6 +183,19 @@ export default function Rounds() {
                     </span>
                   )}
                 </div>
+
+                <button
+                  className="round__remove"
+                  type="button"
+                  onClick={() => setConfirming(round.id)}
+                  aria-label={`Delete the ${round.gross_score} at ${round.course_name}`}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                       stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                       aria-hidden="true">
+                    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                  </svg>
+                </button>
               </li>
             );
           })}
