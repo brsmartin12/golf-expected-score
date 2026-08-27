@@ -93,6 +93,15 @@ understandable steps over large one-shot generations.
   solve. The group boards at step 10
   are the one exception: a third, unhurried context, read away from the course
   and likely screenshotted into a group chat.
+- **The two moments share one card.** Both show typical and potential on the tee
+  in front of you; they differ only by the score input and the closing line. Build
+  one component in two modes, not two screens — `VerdictCard` is already most of
+  the pre-round card. The third tab is the target card; Group takes that slot at
+  step 10. See "The two cards are one card" in `ROADMAP.md`.
+- **A number is not a claim.** A per-course figure, shrunk toward your overall
+  one, is defined from the first round and is always shown. An assertion about a
+  difference — "this course is hard for you" — waits for evidence. Never gate a
+  number behind the threshold that belongs to a claim.
 
 ## Build order (do not skip ahead)
 1. Pure Python calculation functions (potential score, differential) + pytest
