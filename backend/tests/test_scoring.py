@@ -126,16 +126,27 @@ def test_results_are_rounded_to_one_decimal_place():
 
 
 def test_too_few_rounds_gives_none_rather_than_a_bad_number():
-    """The screen shows a countdown; it must not show a median of three rounds."""
-    seven = EIGHT[:-1]
-    assert len(seven) == MINIMUM_ROUNDS - 1
-    assert typical_differential(seven) is None
-    assert potential_differential(seven) is None
+    """The screen shows a countdown instead. Derived from MINIMUM_ROUNDS rather
+    than written as a number, so lowering the threshold does not silently make
+    this test assert something else."""
+    one_short = EIGHT[: MINIMUM_ROUNDS - 1]
+
+    assert typical_differential(one_short) is None
+    assert potential_differential(one_short) is None
 
 
 def test_exactly_the_minimum_number_of_rounds_is_enough():
-    assert len(EIGHT) == MINIMUM_ROUNDS
-    assert typical_differential(EIGHT) is not None
+    assert typical_differential(EIGHT[:MINIMUM_ROUNDS]) is not None
+    assert potential_differential(EIGHT[:MINIMUM_ROUNDS]) is not None
+
+
+def test_a_single_round_never_produces_figures():
+    """One round is different in kind, not just less accurate: it is
+    simultaneously its own median and its own 20th percentile, so the card
+    would show two identical numbers and say nothing. Whatever the minimum
+    becomes, it must never be 1."""
+    assert MINIMUM_ROUNDS >= 2
+    assert typical_differential([14.0]) is None
 
 
 def test_no_rounds_at_all_gives_none():
@@ -143,10 +154,10 @@ def test_no_rounds_at_all_gives_none():
     assert potential_differential([]) is None
 
 
-def test_the_minimum_can_be_lowered_by_the_caller():
-    three = [10.0, 20.0, 30.0]
-    assert typical_differential(three) is None
-    assert typical_differential(three, minimum_rounds=3) == pytest.approx(20.0)
+def test_the_minimum_can_be_overridden_by_the_caller():
+    two = [10.0, 30.0]
+    assert typical_differential(two) is None
+    assert typical_differential(two, minimum_rounds=2) == pytest.approx(20.0)
 
 
 def test_only_the_last_twenty_rounds_count():
@@ -289,8 +300,11 @@ def test_benchmarks_are_empty_until_there_is_enough_history():
 def test_the_countdown_reaches_zero_exactly_when_the_figures_appear():
     result = benchmarks(full(EIGHT + [26.0]))
 
-    assert [b.rounds_until_benchmarks for b in result[:3]] == [8, 7, 6]
+    assert [b.rounds_until_benchmarks for b in result[:3]] == [
+        MINIMUM_ROUNDS, MINIMUM_ROUNDS - 1, MINIMUM_ROUNDS - 2,
+    ]
     assert result[MINIMUM_ROUNDS].rounds_until_benchmarks == 0
+    assert result[MINIMUM_ROUNDS].typical is not None
 
 
 def test_benchmarks_use_only_the_rounds_before_each_one():
@@ -348,17 +362,17 @@ def test_benchmarks_of_an_empty_series_is_empty():
 
 
 def test_a_nine_counts_toward_the_minimum_like_any_other_round():
-    """Seven eighteens plus a nine is eight rounds, and eight rounds is enough.
+    """One short of the minimum in eighteens, plus a nine, reaches it.
 
     The pivot the conversion needs is a CENTRE, and a doubled nine estimates a
     centre well enough -- so nines carry their own weight here rather than
     waiting on full rounds. Requiring full rounds would leave a golfer who
     mostly plays nine holes with no figure at all.
     """
-    seven_and_one = full(EIGHT[:-1]) + [Played(8.0, is_nine=True)]
+    short_of_it = full(EIGHT[: MINIMUM_ROUNDS - 1]) + [Played(8.0, is_nine=True)]
 
-    assert benchmarks(seven_and_one + [Played(20.0)])[-1].typical is not None
-    assert benchmarks(seven_and_one)[-1].rounds_until_benchmarks == 1
+    assert benchmarks(short_of_it + [Played(20.0)])[-1].typical is not None
+    assert benchmarks(short_of_it)[-1].rounds_until_benchmarks == 1
 
 
 def test_a_golfer_who_only_plays_nines_still_gets_both_figures():
