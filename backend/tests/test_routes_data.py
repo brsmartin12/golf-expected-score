@@ -15,6 +15,7 @@ from api.deps import get_current_user
 from api.main import app
 from db import get_session
 from db.models import User
+from golf import MINIMUM_ROUNDS
 from tests.conftest import requires_database
 
 pytestmark = requires_database
@@ -303,7 +304,7 @@ def test_the_first_round_has_a_differential_but_no_benchmarks(client):
 
     assert body["score_differential"] == 16.0  # 88 - 72.0, slope 113
     assert body["rounds_of_history"] == 0
-    assert body["rounds_until_benchmarks"] == 8
+    assert body["rounds_until_benchmarks"] == MINIMUM_ROUNDS
     assert body["typical_score"] is None
     assert body["potential_score"] is None
     assert body["to_typical"] is None

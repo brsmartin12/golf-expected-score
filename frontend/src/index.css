@@ -634,3 +634,20 @@ body {
   outline: 2px solid var(--under);
   outline-offset: 2px;
 }
+
+/* What the benchmarks were drawn from.
+   Sits directly above the stat row so it reads as a caption on those numbers
+   rather than on the headline. Quiet by design: it qualifies the figures
+   without competing with them. */
+.verdict__from {
+  margin-top: var(--space-4);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.verdict__from + .verdict__stats {
+  margin-top: var(--space-2);
+}

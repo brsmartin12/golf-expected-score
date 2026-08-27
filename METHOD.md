@@ -62,8 +62,57 @@ the median at 15.24 untouched.
 **Why 20 rounds.** The same window the WHS uses, so the two are drawn from the
 same population if anyone compares them.
 
-**Why 8 rounds minimum.** A median moves about ±1.4 strokes at eight rounds and
-±1.0 at twenty. Below eight the app shows a countdown instead of a number.
+**Why 3 rounds minimum.** Accuracy improves smoothly with sample size — there
+is no threshold in the data, so any minimum is a judgement about how much error
+is worth trading for having something to show. Measured against the true
+population figures:
+
+| Rounds | typical RMSE | potential RMSE | typical−potential gap | both identical |
+|---:|---:|---:|---:|---:|
+| 1 | 3.21 | 4.09 | 0.00 | **100%** |
+| 2 | 2.29 | 2.65 | 1.05 | 3% |
+| 3 | 1.99 | 2.02 | 1.41 | 3% |
+| 8 | 1.18 | 1.26 | 1.92 | 0% |
+| 20 | 0.77 | 0.82 | 2.14 | 0% |
+
+This was 8, which came from "±1.4 strokes feels tolerable" — a preference
+wearing a threshold's clothes. The cost of it falls entirely on someone new,
+who would watch a dead countdown for most of a season.
+
+**One round is different in kind**, which is why the minimum is not 1. With a
+single round the median and the 20th percentile are *the same number, every
+time*: your only round is simultaneously both. The card would show two identical
+figures and the typical-versus-potential story would say nothing at all. They
+separate at two rounds and never collide again from four.
+
+The card shows what the figures were drawn from — *"from your last 5 rounds"* —
+so a small sample qualifies itself rather than being quietly overconfident.
+
+### Why the gap reads narrower than it is
+
+In the table above, even 20 rounds measures the typical−potential gap as 2.14
+against a true 2.29. That difference is worth understanding, because it never
+fully goes away inside a 20-round window.
+
+**2.29 is the truth**: over 400,000 simulated rounds this golfer's median
+differential is 14.64 and their 20th percentile is 12.35.
+
+**2.14 is what you measure**: take 20 rounds, compute the median and 20th
+percentile *of those 20*, and average the answer over many windows.
+
+Almost all of the difference is potential reading **+0.18 too high**. To read a
+20th percentile off 20 numbers you sort them and look near the 4th-lowest — but
+the 4th-lowest of a 20-sample sits a little *above* the population's true 20th
+percentile, because a small sample does not reach as far into the tail as the
+whole population does. So potential comes out slightly worse than it really is,
+and the gap to typical shrinks.
+
+The median has no such problem: the middle of a sample estimates the middle of a
+population well at almost any size. That is one more reason typical is the figure
+that headlines the card.
+
+In strokes this is about a fifth of one — 83.2 where the truth is 83.0. It is
+recorded because it is a bias we carry knowingly, not because it is actionable.
 
 Code: `backend/golf/scoring.py::typical_differential`, `potential_differential`
 
@@ -181,7 +230,7 @@ asserted; the runs are described in `ROADMAP.md`.
 
 | Effect | Size | Direction | Who it hits |
 |---|---|---|---|
-| Small-sample bias in the 20th percentile | +0.17 strokes | potential reads slightly high | everyone, at 20 rounds |
+| Small-sample bias in the 20th percentile | +0.18 strokes | potential reads slightly high, so the gap to typical reads narrow | everyone; larger below 20 rounds |
 | Gross instead of Adjusted Gross | +1.8 to +2.6 on typical | typical reads high, gap reads wide | anyone who blows up |
 | Nine-hole scaling (sqrt(2)) | +0.18 on potential | same as the 20-round floor above | unchanged by nine share |
 | Nine-hole scaling, if doubled instead | −0.23 | potential would read flatteringly low | not used |

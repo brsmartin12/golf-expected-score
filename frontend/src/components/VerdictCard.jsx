@@ -11,6 +11,13 @@
  * exists until there is history behind the round. Until then the card shows the
  * differential and a countdown rather than an invented benchmark.
  *
+ * The stat row says what the figures were drawn from ("from 5 rounds"). Three
+ * rounds is enough to show them, which is deliberate — waiting for eight meant
+ * someone new watched a dead countdown for most of a season — but three rounds
+ * is a rough estimate and the card should not pretend otherwise. Saying so is
+ * cheaper and more honest than withholding the number, and it is the same
+ * instinct as "a number is not a claim" in ROADMAP.md.
+ *
  * For a nine, every number here is already on the nine's own scale — the API
  * halves the benchmark and runs it through that nine's rating and slope. So the
  * card needs no special arithmetic, only a label saying which nine it was.
@@ -81,6 +88,13 @@ export default function VerdictCard({ round, onDismiss }) {
             a verdict.
           </p>
         </>
+      )}
+
+      {round.rounds_of_history > 0 && (
+        <p className="verdict__from">
+          from your last {round.rounds_of_history}{" "}
+          {round.rounds_of_history === 1 ? "round" : "rounds"}
+        </p>
       )}
 
       <dl className="verdict__stats">

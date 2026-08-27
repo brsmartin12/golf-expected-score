@@ -200,7 +200,7 @@ curl -X POST http://127.0.0.1:8000/rounds \
 ```
 
 `to_typical` and `to_potential` read the way a scorecard does: negative is
-better. Both are null until there are eight earlier rounds to draw on — nines
+better. Both are null until there are three earlier rounds to draw on — nines
 count the same as eighteens — and
 `rounds_until_benchmarks` counts down to that.
 
@@ -251,5 +251,7 @@ potential_differential(history)            # 12.4  -- the 20th percentile
 score_from_differential(13.9, 71.5, 130)   # 87.5
 ```
 
-Both quantiles return `None` below eight rounds rather than a number nobody
-should trust.
+Both quantiles return `None` below three rounds. Not below one, which would be
+tempting: with a single round the median and the 20th percentile are the same
+number, so the card would show two identical figures and say nothing. See
+METHOD.md.

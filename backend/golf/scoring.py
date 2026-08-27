@@ -87,10 +87,30 @@ from golf.handicap import STANDARD_SLOPE, _round_half_up, _validate_course_ratin
 # compares them against.
 WINDOW = 20
 
-# Below this, a quantile is more noise than signal — a median over five rounds
-# moves about ±1.9 strokes, over eight about ±1.4. The screen shows a countdown
-# instead of a number.
-MINIMUM_ROUNDS = 8
+# Below this the app shows a countdown instead of a figure.
+#
+# Three, not eight, and the reason for the change is worth keeping. Eight was
+# picked from "±1.4 strokes feels tolerable", which is a preference wearing a
+# threshold's clothes. Measured across sample sizes there is no cliff anywhere
+# near it — accuracy improves smoothly, and the cost of waiting falls entirely
+# on someone new, who would otherwise watch a dead countdown for most of a
+# season.
+#
+# One round IS different in kind, which is why this is not 1. With a single
+# round the median and the 20th percentile are the same number, every time:
+# your only round is simultaneously both. The card would show two identical
+# figures and the whole typical-versus-potential story would say nothing. They
+# separate at two rounds and never collide again from four.
+#
+#     rounds   typical RMSE   potential RMSE    gap   identical
+#          1           3.21             4.09   0.00        100%
+#          2           2.29             2.65   1.05          3%
+#          3           1.99             2.02   1.41          3%
+#          8           1.18             1.26   1.92          0%
+#         20           0.77             0.82   2.14          0%
+#
+# against a true gap of 2.29 — see "why the gap reads narrow" in METHOD.md.
+MINIMUM_ROUNDS = 3
 
 TYPICAL_QUANTILE = 0.50
 POTENTIAL_QUANTILE = 0.20
