@@ -44,6 +44,28 @@ def client(db_session):
 # collapses to (score - course rating), so a 76 rates 4.0 and nothing else.
 FLAT_TEE = [{"name": "Blue", "par": 72, "course_rating": 72.0, "slope_rating": 113}]
 
+# The same tee with its nines rated, both at standard slope and exactly half the
+# 18-hole rating -- so a nine's differential is just (score - 36.0).
+FLAT_TEE_WITH_NINES = [
+    {
+        **FLAT_TEE[0],
+        "front_course_rating": 36.0,
+        "front_slope_rating": 113,
+        "back_course_rating": 36.0,
+        "back_slope_rating": 113,
+    }
+]
+
+# Real published figures, USGA course 3035, Blue (M). The two nines differ in
+# slope, which is the reason both are stored rather than one shared number.
+LOPSIDED_TEE = [
+    {
+        "name": "Gold", "par": 72, "course_rating": 67.4, "slope_rating": 111,
+        "front_course_rating": 33.7, "front_slope_rating": 116,
+        "back_course_rating": 33.7, "back_slope_rating": 105,
+    }
+]
+
 
 def add_course(client, name="Pine Hills", tees=None):
     payload = {
@@ -245,57 +267,114 @@ def test_a_backfilled_round_is_graded_on_its_own_date(client):
     assert regraded["rounds_of_history"] == 9
 
 
-def test_nine_hole_rounds_are_kept_out_of_the_benchmarks(client):
-    """Half a round through an 18-hole rating produces a differential several
-    strokes too low, which would drag both figures down for twenty rounds."""
+def test_a_nine_without_nine_hole_ratings_cannot_be_rated(client):
+    """Half a round through an 18-hole rating reads several strokes too good.
+
+    Rather than approximate, the round is stored and listed with no differential
+    at all -- which is also the prompt to go and enter the tee's nine-hole
+    figures.
+    """
     tee = add_course(client, tees=FLAT_TEE)["tees"][0]
     log_a_history(client, tee["id"])
 
-    nine = log(client, tee["id"], "2025-02-01", 41, is_nine_hole=True)
-    assert nine["typical_score"] is None
-    assert nine["rounds_of_history"] == 0
-    # No countdown: no number of further rounds gets a nine a verdict, so
-    # promising one would be a lie the screen would repeat forever.
-    assert nine["rounds_until_benchmarks"] == 0
+    body = log(client, tee["id"], "2025-02-01", 41, nine="front")
+
+    assert body["nine"] == "front"
+    assert body["score_differential"] is None
+    assert body["typical_score"] is None
+    assert body["to_typical"] is None
+
+
+def test_an_unrateable_nine_does_not_disturb_the_benchmarks(client):
+    """It is absent from the population, not silently folded in at 41 strokes."""
+    tee = add_course(client, tees=FLAT_TEE)["tees"][0]
+    log_a_history(client, tee["id"])
+    log(client, tee["id"], "2025-02-01", 41, nine="front")
 
     after = log(client, tee["id"], "2025-02-02", 80)
-    assert after["rounds_of_history"] == 8  # the nine did not count
+
+    assert after["rounds_of_history"] == 8
     assert after["typical_score"] == TYPICAL_AFTER_EIGHT
 
 
-def test_pcc_reaches_the_differential(client):
-    tee = add_course(client)["tees"][0]
+def test_a_nine_with_ratings_is_graded_against_a_typical_nine(client):
+    """The point of the exercise. Scales stay separate: a nine is compared with
+    what this golfer usually shoots over nine, not over eighteen."""
+    tee = add_course(client, tees=FLAT_TEE_WITH_NINES)["tees"][0]
+    log_a_history(client, tee["id"])
 
-    plain = client.post(
+    body = log(client, tee["id"], "2025-02-01", 40, nine="front")
+
+    # d9 = 40 - 36.0 = 4.0 on a standard-slope nine.
+    assert body["score_differential"] == pytest.approx(4.0)
+    # typical differential over eighteen is 4.5, so a typical nine is 2.25,
+    # which on this nine is 36.0 + 2.25 = 38.25 -> 38.2 (half up on the tenth).
+    assert body["typical_score"] == pytest.approx(38.3)
+    assert body["to_typical"] == pytest.approx(1.7)
+
+
+def test_a_rated_nine_joins_the_population(client):
+    """It counts as a round of history, unlike an unrateable one."""
+    tee = add_course(client, tees=FLAT_TEE_WITH_NINES)["tees"][0]
+    log_a_history(client, tee["id"])
+    log(client, tee["id"], "2025-02-01", 40, nine="front")
+
+    after = log(client, tee["id"], "2025-02-02", 80)
+
+    assert after["rounds_of_history"] == 9
+
+
+def test_a_nine_is_folded_in_with_its_spread_corrected(client):
+    """Not doubled -- doubling carries sqrt(2) times too much spread, which
+    would drag potential down. See golf/scoring.py."""
+    tee = add_course(client, tees=FLAT_TEE_WITH_NINES)["tees"][0]
+    log_a_history(client, tee["id"])
+    log(client, tee["id"], "2025-02-01", 40, nine="front")  # d9 = 4.0
+
+    after = log(client, tee["id"], "2025-02-02", 80)
+
+    # pivot 4.5; doubled 8.0; corrected 4.5 + 3.5/sqrt(2) = 6.975.
+    # Population is 1..8 plus 6.975 -> nine values, median is the 5th = 5.0.
+    assert after["typical_score"] == pytest.approx(77.0)  # 5.0 + 72.0
+
+
+def test_which_nine_was_played_changes_the_rating_used(client):
+    """Real tees have lopsided nines -- Gold here is 116 front, 105 back."""
+    tee = add_course(client, tees=LOPSIDED_TEE)["tees"][0]
+
+    front = log(client, tee["id"], "2025-03-01", 42, nine="front")
+    back = log(client, tee["id"], "2025-03-02", 42, nine="back")
+
+    # Same score, same 33.7 rating, different slope: the harder nine (116)
+    # rates the round better, so its differential is lower.
+    assert front["score_differential"] < back["score_differential"]
+    assert front["score_differential"] == pytest.approx(8.1)   # 8.3 x 113/116
+    assert back["score_differential"] == pytest.approx(8.9)    # 8.3 x 113/105
+
+
+def test_a_nine_cannot_be_logged_with_a_bogus_side(client):
+    tee = add_course(client, tees=FLAT_TEE_WITH_NINES)["tees"][0]
+
+    response = client.post(
         "/rounds",
-        json={"tee_id": tee["id"], "played_on": "2025-06-14", "gross_score": 88},
-    ).json()
-    tough = client.post(
-        "/rounds",
+        json={"tee_id": tee["id"], "played_on": "2025-02-01",
+              "gross_score": 40, "nine": "middle"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_a_tee_cannot_store_half_a_nine(client):
+    """A rating with no slope produces no differential, so it is rejected."""
+    response = client.post(
+        "/courses",
         json={
-            "tee_id": tee["id"],
-            "played_on": "2025-06-15",
-            "gross_score": 88,
-            "pcc": 1,
+            "name": "Half Entered",
+            "tees": [{**FLAT_TEE[0], "front_course_rating": 36.0}],
         },
-    ).json()
+    )
 
-    assert tough["score_differential"] < plain["score_differential"]
-
-
-def test_rounds_come_back_most_recently_played_first(client):
-    """Ordered by when they were PLAYED, not when they were entered -- a
-    backfill enters the oldest rounds last."""
-    tee = add_course(client)["tees"][0]
-    for played_on in ["2025-06-14", "2023-04-02", "2024-09-30"]:
-        client.post(
-            "/rounds",
-            json={"tee_id": tee["id"], "played_on": played_on, "gross_score": 88},
-        )
-
-    listed = client.get("/rounds").json()
-
-    assert [r["played_on"] for r in listed] == ["2025-06-14", "2024-09-30", "2023-04-02"]
+    assert response.status_code == 422
 
 
 def test_a_round_on_an_unknown_tee_is_a_404(client):

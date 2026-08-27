@@ -10,6 +10,10 @@
  * Both figures are quantiles of this golfer's own differentials, so neither
  * exists until there is history behind the round. Until then the card shows the
  * differential and a countdown rather than an invented benchmark.
+ *
+ * For a nine, every number here is already on the nine's own scale — the API
+ * halves the benchmark and runs it through that nine's rating and slope. So the
+ * card needs no special arithmetic, only a label saying which nine it was.
  */
 
 /** Golf's to-par orientation: over is positive and worse, under negative and better. */
@@ -29,6 +33,8 @@ function plural(n, word) {
   return `${n} more ${word}${n === 1 ? "" : "s"}`;
 }
 
+const HOLES = { front: "the front nine", back: "the back nine" };
+
 export default function VerdictCard({ round, onDismiss }) {
   const graded = round.to_typical !== null && round.to_typical !== undefined;
   const gap = graded ? toPar(round.to_typical) : null;
@@ -43,7 +49,9 @@ export default function VerdictCard({ round, onDismiss }) {
       </button>
 
       <p className="verdict__shot">
-        You shot <strong>{round.gross_score}</strong> at {round.course_name}
+        You shot <strong>{round.gross_score}</strong>
+        {round.nine ? ` on ${HOLES[round.nine]} at ` : " at "}
+        {round.course_name}
       </p>
 
       {gap ? (
@@ -52,6 +60,16 @@ export default function VerdictCard({ round, onDismiss }) {
           <p className="verdict__label">vs. your typical</p>
           <p className="verdict__says">{VERDICT[gap.tone]}</p>
         </>
+      ) : round.score_differential === null ? (
+        <>
+          <p className="verdict__headline verdict__headline--quiet">&mdash;</p>
+          <p className="verdict__label">not rated</p>
+          <p className="verdict__says">
+            This tee has no rating for {HOLES[round.nine]}, so there is nothing
+            to measure the round against. Add it to the course and this round
+            starts counting.
+          </p>
+        </>
       ) : (
         <>
           <p className="verdict__headline verdict__headline--quiet">
@@ -59,9 +77,8 @@ export default function VerdictCard({ round, onDismiss }) {
           </p>
           <p className="verdict__label">differential</p>
           <p className="verdict__says">
-            {round.is_nine_hole
-              ? "Nine-hole rounds are logged but not yet graded."
-              : `${plural(round.rounds_until_benchmarks, "round")} and this gets a verdict.`}
+            {plural(round.rounds_until_benchmarks, "round")} and this gets
+            a verdict.
           </p>
         </>
       )}
@@ -69,7 +86,11 @@ export default function VerdictCard({ round, onDismiss }) {
       <dl className="verdict__stats">
         <div>
           <dt>Differential</dt>
-          <dd>{round.score_differential.toFixed(1)}</dd>
+          <dd>
+            {round.score_differential === null
+              ? "—"
+              : round.score_differential.toFixed(1)}
+          </dd>
         </div>
         <div className={round.typical_score === null ? "verdict__pending" : undefined}>
           <dt>Typical</dt>

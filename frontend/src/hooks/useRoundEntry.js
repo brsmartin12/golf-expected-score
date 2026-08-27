@@ -38,7 +38,7 @@ export function todayIso() {
   return local.toISOString().slice(0, 10);
 }
 
-const EMPTY = { teeId: "", playedOn: todayIso(), grossScore: "" };
+const EMPTY = { teeId: "", playedOn: todayIso(), grossScore: "", nine: "" };
 
 function readDraft() {
   try {
@@ -86,6 +86,7 @@ export function useRoundEntry() {
         teeId: Number(form.teeId),
         playedOn: form.playedOn,
         grossScore: Number(form.grossScore),
+        nine: form.nine,
       });
 
       setVerdict(round);
@@ -93,10 +94,11 @@ export function useRoundEntry() {
 
       // Quick-add: keep the CONTEXT, clear what belongs to the round.
       //
-      // Course, tee and date persist because consecutive entries share them;
-      // the score is the only thing that is different every time. A round is
-      // three fields now — there is nothing else here that could be typed once
-      // and wrongly stamped across a whole backfill.
+      // Course, tee, date and which nine persist because consecutive entries
+      // share them; the score is the only thing that differs every time.
+      // Sticky is safe for all four: each is visible on screen while the next
+      // score is typed, so a wrong one is corrected rather than repeated
+      // unseen.
       setForm((previous) => ({ ...previous, grossScore: "" }));
       return true;
     } catch (saveError) {

@@ -48,10 +48,19 @@ export default function LogRound() {
     course.tees.map((tee) => ({
       id: tee.id,
       label: `${course.name} · ${tee.name}`,
+      // Whether each nine can be rated at all. A nine from a tee without these
+      // is still worth logging — it just cannot be graded, and saying so at
+      // entry time is more useful than a blank verdict afterwards.
+      front: tee.front_course_rating !== null,
+      back: tee.back_course_rating !== null,
     })),
   );
 
   const hasCourses = courses !== null && tees.length > 0;
+  const tee = tees.find((t) => String(t.id) === String(form.teeId));
+  const nineIsUnrated =
+    (form.nine === "front" && tee && !tee.front) ||
+    (form.nine === "back" && tee && !tee.back);
 
   return (
     <>
@@ -144,6 +153,36 @@ export default function LogRound() {
               />
             </label>
           </div>
+
+          <fieldset className="choice">
+            <legend className="field__label">Holes</legend>
+            <div className="choice__options">
+              {[
+                { value: "", label: "18" },
+                { value: "front", label: "Front 9" },
+                { value: "back", label: "Back 9" },
+              ].map((option) => (
+                <label key={option.value} className="choice__option">
+                  <input
+                    type="radio"
+                    name="nine"
+                    value={option.value}
+                    checked={form.nine === option.value}
+                    onChange={(event) => setField("nine", event.target.value)}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {nineIsUnrated && (
+            <p className="field__hint">
+              This tee has no rating for that nine, so the round will be saved
+              but not graded. Add the nine-hole ratings to the course to fix
+              that — every nine from this tee then counts.
+            </p>
+          )}
 
           {error && <p className="notice notice--bad" role="alert">{error}</p>}
 

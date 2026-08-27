@@ -46,13 +46,10 @@ def create_course(
         city=payload.city,
         state=payload.state,
         tees=[
-            Tee(
-                name=tee.name,
-                par=tee.par,
-                course_rating=tee.course_rating,
-                slope_rating=tee.slope_rating,
-                yardage=tee.yardage,
-            )
+            # model_dump() rather than a field list: TeeCreate and Tee carry the
+            # same column names, and spelling them out twice is how the four
+            # nine-hole ratings got silently dropped the first time.
+            Tee(**tee.model_dump())
             for tee in payload.tees
         ],
     )

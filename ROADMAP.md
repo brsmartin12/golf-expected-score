@@ -515,6 +515,193 @@ existing math: framework-free, no I/O, provable.
   potential score, the score that would move your typical down, and your best
   round here. A reason to open the app *before* playing, not only after.
 
+## Nine-hole rounds
+
+People play nine when time is short, and for a while this app logged those
+rounds and refused to grade them. That is the wrong trade: a round the app has
+nothing to say about is a round people stop entering.
+
+**The WHS solved this in 2024.** Before then a nine waited for another nine and
+the two were paired into one 18-hole differential. The revision scales a nine up
+immediately instead, filling the holes not played with the player's *expected*
+score, so it counts the same day. Pairing two nines from different days and
+different weather was a worse estimate of one day's golf.
+
+**Their fill does not transfer to us unchanged.** A Handicap Index is an average
+of the best 8; typical and potential are quantiles. A quantile moves with the
+*spread* of the population it is drawn from, and both obvious ways of scaling a
+nine get the spread wrong:
+
+| Method | Contributed value | Spread vs. a real eighteen |
+|---|---|---|
+| Double it | 2 × d₉ | **1.41×** — doubling doubles the noise too |
+| Fill with the mean (WHS) | d₉ + typical/2 | **0.71×** — an imputed mean adds no variance |
+
+Both are wrong by exactly √2, in opposite directions. Written as *centre +
+deviation × multiplier*, doubling uses 2 and mean-filling uses 1, so the
+multiplier that reproduces a real eighteen's spread is their geometric mean:
+
+```
+contributed = typical + (2 x nine_differential - typical) / sqrt(2)
+```
+
+Simulated over 8,000 golfers with a 20-round window, against the true
+population quantiles:
+
+| Nines | Method | typical RMSE | potential bias | potential RMSE |
+|---:|---|---:|---:|---:|
+| 0% | *(baseline)* | 0.771 | **+0.174** | 0.825 |
+| 25% | exclude | 0.902 | +0.231 | 0.959 |
+| 25% | double | 0.825 | −0.024 | 0.880 |
+| 25% | fill (WHS) | 0.813 | +0.372 | 0.903 |
+| 25% | **√2** | 0.816 | **+0.182** | **0.853** |
+| 50% | exclude | 1.060 | +0.306 | 1.118 |
+| 50% | double | 0.856 | −0.225 | 0.980 |
+| 50% | fill (WHS) | 0.844 | +0.527 | 1.004 |
+| 50% | **√2** | 0.836 | **+0.179** | **0.886** |
+
+The +0.174 at 0% nines is a floor — small-sample bias in a 20th-percentile
+estimate, present whether or not anyone ever plays nine holes. The √2 method
+holds that figure at every nine share, so it adds no bias of its own. Doubling
+drifts negative and flatters potential; mean-filling drifts to +0.53 and
+understates it by half a stroke. At half the rounds being nines, √2 cuts the
+error on both figures by about 21% against throwing them away.
+
+**The ratings matter more than the method.** A nine has its own published Course
+Rating and Slope, and the tempting shortcut is to halve the 18-hole rating and
+reuse the 18-hole slope. Checked against real USGA data (course 3035, eleven
+tees):
+
+| | mean abs error | worst |
+|---|---|---|
+| CR₉ ≈ CR₁₈ / 2 | 0.13 strokes | 0.25 |
+| slope₉ ≈ slope₁₈ | 2.0 points | 6 |
+
+The rating halves almost perfectly — the two nines have to sum to the eighteen.
+The **slope** does not: that card's Gold tee is 111 overall but 116 front and
+105 back. Approximating costs up to 0.87 strokes on the 18-hole scale, four
+times what the conversion gains, so a nine only joins the population when its
+tee has real nine-hole figures. Without them the round is logged, listed, and
+labelled *not rated*, with a prompt to add them.
+
+**A nine is still graded on its own scale.** The 18-hole benchmark is halved and
+run through that nine's rating, so the card says *"your typical back nine here
+is 38.4"* — never half of an eighteen dressed up as a full round.
+
+**Nines carry their own weight.** The conversion pivots on the golfer's own
+centre, and the first version of this drew that centre from full rounds only —
+which quietly shut out the golfer the feature exists for. At a 75% nine share,
+only one golfer in ten ever accumulates eight eighteens inside a 20-round
+window; at 100%, none do.
+
+The pivot does not need full rounds. It is estimating a *centre*, not a spread,
+and doubling a nine's median estimates an eighteen's to within about 0.09
+strokes. (It undershoots slightly because a sum of two nines is less skewed
+than one nine, so doubling the median of the more-skewed thing lands low.)
+Measured over 4,000 golfers per case:
+
+| Nines | Pivot from full rounds only | Pivot from everything |
+|---:|---|---|
+| 25% | typ RMSE 0.817, 100% get a figure | 0.827, 100% |
+| 50% | 0.869, **86%** | 0.888, **100%** |
+| 75% | 0.819, **10%** | 0.973, **100%** |
+| 100% | — , **0%** | 1.040, **100%** |
+
+Free up to a 50% share — potential is marginally *better* — and past that it is
+the difference between a usable figure and none. So the eight-round minimum
+counts rounds of any length, and a golfer who only ever plays nine holes gets
+both figures.
+
+**The limit that does remain** is the ratings, not the maths: a nine from a tee
+whose nine-hole figures are missing cannot be rated at all, and no amount of
+history fixes that. Enter them once per tee.
+
+### A nine counts once for a quantile and half for a mean
+
+The √2 correction gives a scaled nine the same *marginal* distribution as a real
+eighteen — same centre, same spread, measured at 3.19 against 3.20. That is
+exactly what a quantile needs, because a quantile is estimating a distribution.
+
+It is **not** enough for anything that averages. Scaled nines are all shrunk
+toward the same pivot, so their errors are correlated and do not average away.
+Measured over 20,000 windows, the mean of twenty scaled nines is 1.36× as
+variable as the mean of twenty eighteens — so twenty nines carry about as much
+information as **10.8** eighteens. One nine is worth **0.54 of a round**, which
+is just "half the holes" arriving the long way round.
+
+Ignore that and every error bar comes out too narrow. Claimed interval against
+the real one, on a mixed window:
+
+| Nine share | Unweighted (the naive version) | Weighted |
+|---:|---:|---:|
+| 25% | 0.93 | 1.00 |
+| 50% | 0.87 | 1.01 |
+| 75% | **0.80** | 1.00 |
+
+A form table built the obvious way would promise 95% confidence and deliver
+about 80% for a golfer who mostly plays nines — calling trends significant that
+are not, for exactly the people this feature was added to serve.
+
+**The rule, and it is two lines:**
+
+| Computing | How a nine enters | Weight |
+|---|---|---|
+| A **quantile** — typical, potential | √2-scaled onto the 18-hole scale | 1.0 |
+| A **mean or an error bar** — form delta, trends, course fit | simply doubled | 0.5 |
+
+The second row is plain inverse-variance weighting: a doubled nine is an
+unbiased estimate of the 18-hole mean with twice the variance, so it earns half
+the weight, and its error is independent of every other round's. Effective
+sample size is then `Σ weights`, not the row count — that is the number the
+error bars divide by, and the number `"need 4 more rounds here"` should count.
+
+Note the second row does **not** use the √2 value. Borrowing the pivot is what
+correlates the errors; for a mean there is nothing to borrow, because the mean
+is the thing being estimated.
+
+**Where this bites, concretely.** Tier 3's trend error bars, Tier 4's shrinkage
+denominator `n/(n+k)`, and the Tier 5 form delta and its standard error. All
+three are means or intervals over a window that can contain nines. None of them
+are built yet, which is the only reason this is a note rather than a bug.
+
+One display consequence too: `to_typical` is in strokes over the holes played,
+so **+1.0 on a nine is a √2 bigger deviation than +1.0 on an eighteen**. Fine on
+a round card, which says "back 9" beside it. Not fine to average or rank across
+a mixed list without converting first.
+
+### What GHIN's version of this costs them
+
+Worth recording, because it explains why we did not simply copy them. The USGA's
+worked example — Handicap Index 14.0, nine-hole differential 7.2, resulting
+18-hole differential 15.7 — pins their arithmetic down:
+
+```
+18-hole differential = d9 + (Handicap Index + 3) / 2
+```
+
+They fill with half your *average* round, not half your index; the +3 is the
+WHS's own figure for the gap between the two. The fill adds no variance, and
+the USGA says plainly it is "not specific to each player".
+
+Both properties cost them. Simulating the same twenty rounds scored each way,
+the index their method produces reads **too high** — the low tail is what an
+index averages, and squashing a distribution toward its middle lifts that tail:
+
+| Player | 25% nines | 50% nines | 75% nines |
+|---|---:|---:|---:|
+| steady (18h sd 2.2) | +0.25 | +0.54 | +0.85 |
+| typical (18h sd 3.2) | +0.23 | +0.48 | +0.73 |
+| streaky (18h sd 5.0) | +0.16 | +0.31 | +0.48 |
+
+For a handicap authority "too high" is the *safe* direction — a player given
+slightly too many strokes is not sandbagging — so this is very plausibly
+deliberate rather than an oversight. For us the same bias lands on **potential**,
+where it understates precisely the number a golfer most wants to be right. Same
+error, opposite value, which is the whole reason the methods diverge.
+
+(Reconstructed from the published worked example, not from their
+implementation. The mechanism is confirmed; treat the decimals as indicative.)
+
 ## Tier 3 — Current form (the headline)
 
 Model the differential series instead of ranking it.
@@ -694,6 +881,15 @@ manipulation; a form table does not need that defence.
 the recent rounds pull the baseline toward themselves and the delta is
 attenuated — real form changes look smaller than they are. Baseline is the
 trailing rounds *before* the recent window.
+
+**Nine-hole rounds are half a round here, not one.** This is a mean and a
+standard error, not a quantile, so the √2-scaled values that typical and
+potential use are the wrong input: double the nine, weight it 0.5, and size the
+window by `Σ weights`. Both windows above are round *counts*, and for a golfer
+who plays a lot of nines those counts overstate what is actually known — a form
+table built on the raw counts claims 95% confidence and delivers about 80%. See
+"A nine counts once for a quantile and half for a mean" above; it is the single
+easiest thing to get wrong when this is built.
 
 **How much of a change is actually detectable.** This is the uncomfortable part,
 and it should shape the design rather than be discovered later. With a typical

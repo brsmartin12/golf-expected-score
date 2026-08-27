@@ -32,6 +32,42 @@ same differential. So the chain runs
 
 and never passes through a handicap at any point.
 
+Nine-hole rounds
+----------------
+A nine is half a round, and folding one into a quantile is not as simple as
+doubling it. Doubling doubles the noise along with the signal: a nine carries
+half an eighteen's variance, so a doubled nine has sqrt(2) times too MUCH
+spread. The WHS's own method -- fill the missing nine with the player's expected
+score -- has the opposite problem, because imputing a mean adds no variance at
+all, leaving sqrt(2) times too LITTLE.
+
+Neither error is harmless here. Typical is a median and survives both, but
+potential is a 20th percentile, and a percentile moves with the spread of the
+population it is drawn from: too much spread flatters your potential, too little
+understates it. Simulated over 8,000 golfers, doubling pulls potential 0.23
+strokes low at a 50% nine share and mean-filling pushes it 0.53 high.
+
+Writing both as "centre + deviation x multiplier" shows the fix. Doubling uses
+2, mean-filling uses 1, and the multiplier that reproduces a real eighteen's
+spread is their geometric mean:
+
+    contributed = typical + (2 x nine_differential - typical) / sqrt(2)
+
+That is `eighteen_from_nine` below. It leaves potential's bias at +0.18 -- the
+same figure you get with no nine-hole rounds at all, which is small-sample bias
+in the estimator rather than anything the conversion introduced.
+
+A nine bootstraps its own history, incidentally. The pivot is a centre, not a
+spread, so a doubled nine estimates it well enough (about 0.09 strokes low) --
+which means a golfer who only ever plays nine holes still gets both figures.
+
+The catch is upstream, in the ratings. A nine needs its OWN Course Rating and
+Slope Rating, which the USGA publishes per tee. Halving the 18-hole rating is
+accurate to about 0.13 strokes, but the slope genuinely differs between the two
+nines -- 116 front against 105 back is a real published example -- and using the
+18-hole slope costs up to 0.87 strokes, four times what the conversion gains. So
+a nine only joins the population when its tee has real nine-hole figures stored.
+
 What the numbers may NOT be used for
 ------------------------------------
 Allocating strokes between players. Because this app takes gross scores while
@@ -41,6 +77,8 @@ rate a quarter of a stroke apart can come out over two strokes apart here. That
 cancels in every self-referential comparison (typical against potential, this
 course against your overall) and does not cancel between people. See ROADMAP.md.
 """
+
+from typing import NamedTuple
 
 from golf.handicap import STANDARD_SLOPE, _round_half_up, _validate_course_rating, _validate_slope
 
@@ -56,6 +94,10 @@ MINIMUM_ROUNDS = 8
 
 TYPICAL_QUANTILE = 0.50
 POTENTIAL_QUANTILE = 0.20
+
+# A nine holds half an eighteen's variance, so doubling one overshoots the real
+# spread by exactly sqrt(2). See "Nine-hole rounds" in the module docstring.
+NINE_SPREAD_CORRECTION = 2 ** 0.5
 
 
 def quantile(values: list[float], q: float) -> float:
@@ -128,28 +170,113 @@ def score_from_differential(
     )
 
 
-def trailing(
-    differentials: list[float],
-    q: float,
+class Played(NamedTuple):
+    """One round in a chronological series, as the quantile layer sees it.
+
+    `differential` is on the scale its own ratings produce: the 18-hole scale
+    for a full round, the nine-hole scale for a nine. Mixing them is the whole
+    problem `benchmarks` exists to solve, so the flag travels with the number
+    rather than being inferred from its size.
+
+    `is_nine` False with no nine-hole ratings available is how a nine that
+    cannot be converted is passed in -- see `benchmarks`. Such a round should
+    simply be left out of the series instead.
+    """
+
+    differential: float
+    is_nine: bool = False
+
+
+class Benchmark(NamedTuple):
+    """What a golfer's history says about one round, before that round is seen.
+
+    Both figures are on the 18-hole scale and are None until there is enough
+    history. `rounds_until_benchmarks` counts down to that; it reaches 0 at the
+    same moment the figures appear.
+    """
+
+    typical: float | None
+    potential: float | None
+    rounds_of_history: int
+    rounds_until_benchmarks: int
+
+
+def eighteen_from_nine(nine_differential: float, typical_differential: float) -> float:
+    """Put a nine-hole differential onto the 18-hole scale, spread and all.
+
+    Doubling would get the centre right and the spread wrong by sqrt(2); so
+    would filling the missing nine with the player's mean, in the other
+    direction. This keeps the centre and corrects the spread, which is what a
+    percentile needs -- see "Nine-hole rounds" in the module docstring.
+
+    `typical_differential` is the golfer's own median, on the 18-hole scale, and
+    it must come from rounds played BEFORE this one. It is the pivot the
+    deviation is measured from, so a wrong one shifts the result.
+    """
+    doubled = 2 * nine_differential
+    deviation = doubled - typical_differential
+    return typical_differential + deviation / NINE_SPREAD_CORRECTION
+
+
+def benchmarks(
+    rounds: list[Played],
     window: int = WINDOW,
     minimum_rounds: int = MINIMUM_ROUNDS,
-) -> list[float | None]:
-    """For each round, the quantile of the rounds BEFORE it.
+) -> list[Benchmark]:
+    """For each round, what the rounds BEFORE it say the golfer usually shoots.
 
-    Oldest first. Position i is computed from at most `window` differentials
-    ending at i-1, so a round is never judged against itself or against rounds
-    that had not been played yet.
+    Oldest first, one Benchmark per round. Position i sees at most `window`
+    rounds ending at i-1, so a round is never judged against itself or against
+    rounds that had not been played yet. Computing a golfer's whole history
+    against today's numbers silently rewrites every past round and destroys
+    every trend; this is the discipline that prevents it.
 
-    That point-in-time discipline is the reason this exists rather than a single
-    figure applied to every row: computing a golfer's whole history against
-    today's numbers silently rewrites every past round and destroys every trend.
+    Nines are folded in through `eighteen_from_nine`, which needs a centre to
+    pivot on. That centre comes from every round in the window, with nines
+    doubled -- NOT from the full rounds alone.
+
+    The distinction matters more than it looks. Requiring full rounds for the
+    pivot means a golfer who mostly plays nine holes never gets a figure at all:
+    at a 75% nine share only one golfer in ten ever accumulates eight eighteens
+    inside a 20-round window. Doubling a nine's median to stand in for an
+    eighteen's is slightly biased -- about -0.09 strokes, because a sum of two
+    nines is less skewed than one nine, so doubling the median undershoots --
+    and that is a tenth of a stroke against showing nothing at all.
+
+    Measured over 4,000 golfers per case, pivoting on everything costs nothing
+    up to a 50% nine share and leaves potential marginally BETTER; past that it
+    is the difference between a figure with an RMSE near 1.0 and no figure. So
+    the minimum below counts rounds of any length.
     """
-    result: list[float | None] = []
-    for i in range(len(differentials)):
-        history = differentials[max(0, i - window) : i]
+    result: list[Benchmark] = []
+
+    for i in range(len(rounds)):
+        history = rounds[max(0, i - window) : i]
+
+        if len(history) < minimum_rounds:
+            result.append(
+                Benchmark(None, None, 0, minimum_rounds - len(history))
+            )
+            continue
+
+        full = [r.differential for r in history if not r.is_nine]
+        nines = [r.differential for r in history if r.is_nine]
+
+        # The pivot: this golfer's rough centre on the 18-hole scale, taken from
+        # every round in the window. A nine is doubled for this purpose only --
+        # a crude scaling, but it is estimating a centre, where the spread error
+        # doubling introduces does not apply. Drawn from the same window as the
+        # figures themselves, so it moves with them rather than lagging behind.
+        pivot = quantile(full + [2 * d for d in nines], TYPICAL_QUANTILE)
+        population = full + [eighteen_from_nine(d, pivot) for d in nines]
+
         result.append(
-            _round_half_up(quantile(history, q), 1)
-            if len(history) >= minimum_rounds
-            else None
+            Benchmark(
+                typical=_round_half_up(quantile(population, TYPICAL_QUANTILE), 1),
+                potential=_round_half_up(quantile(population, POTENTIAL_QUANTILE), 1),
+                rounds_of_history=len(population),
+                rounds_until_benchmarks=0,
+            )
         )
+
     return result
