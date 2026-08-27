@@ -14,7 +14,9 @@ what this app computes: our figures come from gross scores, where the World
 Handicap System caps each hole at net double bogey, so calling ours an index
 would be claiming a precision it does not have. A percentile has nothing missing
 from it — "the median of your last 20 rounds" is the whole answer to how it
-works. See **[ROADMAP.md](ROADMAP.md)**.
+works — the long version is in **[METHOD.md](METHOD.md)**, along with every
+known bias and its measured size. See **[ROADMAP.md](ROADMAP.md)** for where
+this is going and why.
 
 Partway through **step 5**: the calculation core, a FastAPI wrapper, a migrated
 database, and a three-tab React app that logs rounds and grades them.
@@ -22,6 +24,7 @@ database, and a three-tab React app that logs rounds and grades them.
 ## Layout
 
 ```
+METHOD.md               how every number is worked out, and what it costs
 ROADMAP.md              where this is going, and why
 backend/
   golf/handicap.py      single-round math (framework-free, no I/O)

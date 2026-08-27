@@ -39,6 +39,11 @@ and course fit, which an index throws away entirely.
 **See `ROADMAP.md`** for the full vision and the feature tiers. Read it before
 proposing product direction — the "why" lives there, this file is the "how."
 
+**See `METHOD.md`** for the maths: every formula, the reason it is that one
+rather than an alternative, and the measured size of every bias we knowingly
+carry. It is the answer to "how is this number worked out?" — keep it current
+when a formula changes, since a stale one is worse than none.
+
 ## Who's building this
 The developer is an experienced Python/ML engineer (data science background)
 who is NEW to full-stack web development and production architecture. This is
@@ -147,6 +152,7 @@ understandable steps over large one-shot generations.
 
 ## Project layout
 ```
+METHOD.md             every formula, why it is that one, and its measured bias
 ROADMAP.md            product vision and feature tiers — the "why"
 backend/
   pyproject.toml      package metadata; `pip install -e ".[dev]"` to set up
@@ -218,6 +224,13 @@ later and nothing needs moving.
   After changing a model, run `alembic revision --autogenerate -m "..."`, read
   what it wrote, and commit it with the model change. `tests/test_migrations.py`
   fails if the two ever disagree.
+- **Gross scores in, never Adjusted Gross.** The WHS caps each hole at net
+  double bogey; we take the card. It is circular for us to compute (it needs a
+  Course Handicap) and it answers a question nobody asks about their own game.
+  The cost is that typical reads 1.8–2.6 strokes high for anyone who blows up
+  while potential barely moves, so our typical-to-potential gap runs ~1.7 wider
+  than a WHS one. Never name a parameter or column `adjusted_*` — that was a
+  real bug, and it read as a handicap breadcrumb. See `METHOD.md`.
 - **The app computes no handicap index, and nothing may be labelled one.**
   Potential is the 20th percentile of your own Score Differentials, typical the
   median — one calculation, two quantiles, and a Score Differential needs no
