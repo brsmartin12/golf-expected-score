@@ -11,8 +11,12 @@ module produces.
 
 The formulas
 ------------
-    Score Differential = (113 / Slope) x (Adjusted Gross Score - Course Rating - PCC)
+    Score Differential = (113 / Slope) x (Gross Score - Course Rating - PCC)
     Course Handicap    = Handicap Index x (Slope / 113) + (Course Rating - Par)
+
+The WHS writes the first one with *Adjusted* Gross Score, and this app does not
+use one. See "Gross, not Adjusted Gross" below -- a deliberate choice, not a
+missing step.
 
 The app computes no Handicap Index
 ----------------------------------
@@ -36,6 +40,39 @@ a match -- a number a player reads off their GHIN account and types in on the
 day, never one this app derives. Allocating strokes between players is the one
 job our own figures may not do, and these two are how the future net match
 calculator does it without them.
+
+Gross, not Adjusted Gross
+-------------------------
+The WHS feeds this formula an Adjusted Gross Score: every hole capped at net
+double bogey, which is par + 2 plus whatever handicap strokes you receive there.
+We feed it the score on the card, and the golfer is NOT asked to adjust anything.
+
+Two reasons, and the second is the real one.
+
+The practical reason: net double bogey needs a Course Handicap, which needs a
+Handicap Index, which this app deliberately does not have. Asking a golfer to
+work it out by hand would also end the fifteen-second round entry that the whole
+score-only scope decision exists to protect.
+
+The better reason: we are answering a different question. AGS exists to make
+competition fair -- it stops one disaster hole wrecking a handicap that other
+people will give strokes against. Nobody asks "what would I have shot if my
+triple had been capped?" about their own game. Asked what you usually shoot, the
+honest answer is the number on the card.
+
+What it costs, measured over 4,000 simulated rounds per player:
+
+    player                     typical   potential   the gap
+    steady  (rare blow-ups)      +0.00       +0.00     +0.00
+    typical (some blow-ups)      +1.80       +0.00     +1.80
+    streaky (often blows up)     +2.60       +0.90     +1.70
+
+Potential is barely touched, because a good round has few disasters to cap.
+Typical carries the whole effect, so the gap between the two runs about 1.7
+strokes wider here than a WHS-based figure would. Self-referential comparisons
+are unaffected -- a round and the typical it is measured against are both
+uncapped, so `to_typical` still reads true. It does not cancel between people,
+which is one more reason these figures may not allocate strokes. See METHOD.md.
 
 A note on 0.96
 --------------
@@ -101,7 +138,7 @@ def _validate_par(par: int) -> None:
 
 
 def score_differential(
-    adjusted_gross_score: float,
+    gross_score: float,
     course_rating: float,
     slope_rating: float,
     pcc: float = 0.0,
@@ -112,6 +149,13 @@ def score_differential(
     on an easy one, and it is the input to everything in `scoring.py`. Rounded
     to one decimal place, per WHS.
 
+    The first argument is the score as written on the card. It was named
+    `adjusted_gross_score` once, after the WHS's own name for this input, and
+    that was wrong in a way worth stating plainly: an Adjusted Gross Score caps
+    every hole at net double bogey, we compute no such thing, and naming a
+    parameter after a quantity we never produce invites the reader to assume we
+    do. See "Gross, not Adjusted Gross" in the module docstring.
+
     `pcc` is the Playing Conditions Calculation -- a course-wide adjustment for
     the day's weather and setup. It defaults to 0.0 and you will almost never
     set it by hand; it is a parameter so the signature matches the real formula.
@@ -119,9 +163,7 @@ def score_differential(
     _validate_slope(slope_rating)
     _validate_course_rating(course_rating)
 
-    raw = (STANDARD_SLOPE / slope_rating) * (
-        adjusted_gross_score - course_rating - pcc
-    )
+    raw = (STANDARD_SLOPE / slope_rating) * (gross_score - course_rating - pcc)
     return _round_half_up(raw, 1)
 
 
