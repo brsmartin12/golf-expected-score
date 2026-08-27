@@ -144,8 +144,11 @@ understandable steps over large one-shot generations.
    shrunk toward zero with confidence intervals, so "this course suits your
    game" is only claimed when the data supports it — and says "need 4 more
    rounds here" when it doesn't.
-9. Deploy: backend + DB to Railway/Render, frontend to Vercel. Wire the
-   frontend to the deployed backend URL via an environment variable.
+9. Deploy: backend + DB to a managed platform, frontend to static hosting.
+   Wire the frontend to the deployed backend URL via an environment variable.
+   Packaging and hosting are separate choices and most platforms take a
+   Dockerfile — see "Deployment, and keeping dev and prod the same thing" in
+   `ROADMAP.md`, which also lists what the repo has to pin and lock first.
 10. Auth (Supabase Auth or Clerk) + groups, so friends can use it with their
     own data. Then two group boards — a **form table** ranked on who is playing
     better than their *own* normal right now, and a **season table** ranked on

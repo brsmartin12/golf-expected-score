@@ -1314,6 +1314,87 @@ rounds posted while in a group are visible to that group, or the leaderboard
 openly reports how many rounds each member has withheld. Silently allowing
 hidden rounds is the one option that is actually dishonest.
 
+## Deployment, and keeping dev and prod the same thing
+
+Not decided yet, deliberately — but the shape of the decision is worth writing
+down, because the failure it prevents ("works on my machine") is invisible right
+now and expensive later.
+
+### Packaging and hosting are separate questions
+
+They get discussed as if they compete, and they do not:
+
+- **Docker is a packaging format.** It says "here is a machine with the app
+  already inside it."
+- **Railway, Render, Fly, Vercel are places to run things.** Most of them accept
+  a Dockerfile perfectly happily.
+
+So "use Docker" and "deploy to Railway" are not alternatives. The two real
+questions are *how is it packaged* (an explicit Dockerfile, or let the platform
+infer a build from `pyproject.toml` / `package.json`) and *where does it run*.
+
+Docker is the standard answer at company scale because at that scale you need
+explicit packaging and something like Kubernetes underneath. For one app and a
+handful of golfers, a managed platform is the right size — and using one does
+not mean giving up the Dockerfile.
+
+### The answer differs by piece
+
+| Piece | Packaging | Why |
+|---|---|---|
+| Frontend (Vite SPA) | **none needed** | It builds to static HTML, CSS and JS. There is no runtime to containerise — a CDN serves files. A Dockerfile here wraps a web server around something that does not need one. |
+| Backend (FastAPI) | **Dockerfile earns its keep** | A real process with real dependencies and a Python version that matters. This is where "works on my machine" actually bites. |
+| Database | **managed, no packaging** | Postgres from a provider. Also where automated backups stop being a personal responsibility. |
+
+### Parity is not free
+
+The point of a Dockerfile is that dev and prod are the same thing. That only
+holds if the container is used in *dev too*. A Dockerfile that exists solely for
+production is not parity — it is a second environment to debug, and the bugs
+that matter are exactly the ones that appear in only one of them.
+
+Running the container locally costs the fast loop: `uvicorn --reload` restarting
+on save is a large part of why the current setup is pleasant. It can be kept by
+mounting the source into the container, which is a normal thing to do and one
+more moving part to understand. Worth choosing on purpose rather than drifting
+into either extreme.
+
+### What the repo needs first, either way
+
+Checked, not assumed:
+
+| | State |
+|---|---|
+| Frontend dependencies | ✅ `package-lock.json` exists — `npm ci` reproduces it exactly |
+| Frontend runtime | ❌ no `engines`, no `.nvmrc` — a platform picks the Node version |
+| Backend dependencies | ❌ `>=` ranges only, **no lockfile** |
+| Backend runtime | ❌ `requires-python = ">=3.11"` is a floor, not a pin |
+
+The backend row is the one that bites. `fastapi>=0.115` means a build today and
+a build in six months install *different software from identical source*. That
+is the mechanism behind "it worked last week and nobody changed anything", and
+it stays invisible until the day it is not.
+
+The frontend is half-solved by accident: npm wrote a lockfile without being
+asked. Python's default tooling does not.
+
+Two things to do when this tier starts, both quick:
+
+1. **Pin the runtimes** — `.python-version`, and `engines` in `package.json`.
+2. **Lock the backend dependencies** — `pip freeze` into a lockfile, or move to
+   `uv`, which maintains one properly.
+
+Neither matters today: one developer, one machine, dependencies installed once.
+Both start mattering the moment there are two environments, which is precisely
+what this tier creates.
+
+### And test the restore
+
+Whichever provider: check snapshots are actually enabled, check the retention
+window, and **restore one once** into a throwaway database. An untested restore
+on a managed provider is exactly as worthless as an untested `pg_dump` — the
+difference is it feels safe while being equally exposed.
+
 ## Tier 6 — Stretch
 
 - Automatic course and tee slope/rating lookup, so adding a course isn't manual data
