@@ -286,24 +286,36 @@ later and nothing needs moving.
   After changing a model, run `alembic revision --autogenerate -m "..."`, read
   what it wrote, and commit it with the model change. `tests/test_migrations.py`
   fails if the two ever disagree.
-- **Gross scores in, never Adjusted Gross.** The WHS caps each hole at net
-  double bogey; we take the card. It is circular for us to compute (it needs a
-  Course Handicap) and it answers a question nobody asks about their own game.
+- **Gross scores in, never Adjusted Gross — while a round is a total.** The WHS
+  caps each hole at net double bogey; we take the card, because a total cannot
+  supply the cap. Not because it is circular: net double bogey needs a Course
+  Handicap, but the WHS resolves that *recursively* — each round is capped
+  against the index held before it — which is the traversal `played_on` ordering
+  already performs. It also answers a question nobody asks about their own game.
   The cost is that typical reads 1.8–2.6 strokes high for anyone who blows up
   while potential barely moves, so our typical-to-potential gap runs ~1.7 wider
   than a WHS one. Never name a parameter or column `adjusted_*` — that was a
   real bug, and it read as a handicap breadcrumb. See `METHOD.md`.
-- **The app computes no handicap index, and nothing may be labelled one.**
-  Potential is the 20th percentile of your own Score Differentials, typical the
-  median — one calculation, two quantiles, and a Score Differential needs no
-  index. That way "how is this worked out?" has a one-sentence answer instead of
-  looking like the handicap formula with pieces missing.
-- **The app's figures never allocate strokes between players.** We take gross
-  scores; GHIN caps each hole at net double bogey, and that bias scales with how
-  often a player blows up — two golfers GHIN rates 0.24 apart can come out 2.4
-  apart here. It cancels in every self-referential comparison and does not cancel
-  between people. Stroke-giving needs Adjusted Gross Scores or an agreed official
-  index. See `ROADMAP.md`.
+- **No handicap index while a round is only a total; nothing is ever labelled an
+  issued one.** Potential is the 20th percentile of your own Score
+  Differentials, typical the median — one calculation, two quantiles, and a
+  Score Differential needs no index. The original ban existed because
+  best-8-of-20 over uncapped totals is the handicap formula with pieces missing;
+  that is an argument about missing *data*, and hole scores (step 11) supply it.
+  Once they do, compute it — never present it as issued, always beside a GHIN
+  figure rather than instead of one, and never as the basis for typical and
+  potential, which stay percentiles because percentiles are the better numbers.
+  Derived on read like everything else; still no `handicap_snapshots`, still no
+  `rounds.index_at_time`. See "The replacement rule" in `ROADMAP.md`.
+- **Figures from uncapped scores never allocate strokes between players.** We
+  take gross scores; GHIN caps each hole at net double bogey, and that bias
+  scales with how often a player blows up — two golfers GHIN rates 0.24 apart can
+  come out 2.4 apart here. It cancels in every self-referential comparison and
+  does not cancel between people. **The cap is the fix, not the index**: an index
+  over uncapped scores allocates just as unfairly. So stroke-giving needs capped
+  scores from every player in the match — meaning every one of them has entered
+  holes — or an agreed official index. Say which at the point of use; never
+  substitute an uncapped figure quietly. See `ROADMAP.md`.
 - **Store raw inputs; derive everything else on read.** Differentials, typical
   and potential are computed, never persisted as the source of truth —
   otherwise a formula fix leaves the database disagreeing with the code. This is

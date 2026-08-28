@@ -12,16 +12,21 @@ Both are quantiles of the golfer's own Score Differentials:
     typical   = the median          (half your rounds are better)
     potential = the 20th percentile (the round you shoot when you play well)
 
-One calculation, two settings. That matters for more than tidiness. The app
-deliberately does NOT compute a Handicap Index, because a figure worked out as
-"best 8 of the last 20" is recognisably the WHS formula, and the first person to
-ask how it works would find that formula with pieces missing — no net double
-bogey cap, no safeguards — which reads as a half-finished handicap rather than a
-different measure on purpose.
+One calculation, two settings. That matters for more than tidiness. While a
+round is only a total, the app does NOT compute a Handicap Index: a figure
+worked out as "best 8 of the last 20" over uncapped scores is recognisably the
+WHS formula with pieces missing — no net double bogey cap, no safeguards — which
+reads as a half-finished handicap rather than a different measure on purpose.
 
 A percentile has no such problem. There is nothing absent from it. "Typical is
 the median of your last 20 rounds, potential is your 20th percentile" is the
 whole answer.
+
+That is an argument about missing *data*, and hole scores would supply it — at
+which point an index becomes computable and gets computed, never presented as an
+issued one. None of that touches this module: typical and potential stay
+percentiles because percentiles answer the question better, not because an index
+was unavailable. See "The replacement rule" in ROADMAP.md.
 
 None of this needs an index, because a Score Differential does not: it is a
 function of the score, the rating, the slope and the PCC alone. Two golfers of

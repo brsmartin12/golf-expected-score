@@ -172,31 +172,52 @@ Code: `backend/golf/scoring.py::eighteen_from_nine`, `benchmarks`
 
 ## 5. What this app deliberately does not do
 
-### It computes no Handicap Index, and labels nothing one
+### It computes no Handicap Index — while a round is only a total
 
 A WHS index is the average of your **best 8 of the last 20** differentials. We
-could compute that. We don't, and the reason is the question this file exists to
-answer: a figure worked out as best-8-of-20 is recognisably the handicap
-formula, so the first person to ask how it works would find that formula with
-pieces missing — no net double bogey cap, none of the WHS safeguards — and read
-it as a half-finished handicap rather than a different measure chosen on purpose.
+could compute that arithmetic today. We don't, and the reason is the question
+this file exists to answer: over uncapped totals, best-8-of-20 is recognisably
+the handicap formula with pieces missing — no net double bogey cap, none of the
+WHS safeguards — so the first person to ask how it works reads it as a
+half-finished handicap rather than a different measure chosen on purpose.
 
 A percentile has no such problem. Nothing is absent from it.
 
 The two are close in any case: a 20th percentile runs about 0.3 strokes above
 best-8-of-20 for a steady player and 0.9 for a very streaky one.
 
+**This is a statement about the data, not a principle.** The pieces are missing
+because a total cannot supply them. If hole scores are ever recorded the cap
+becomes computable, the safeguards were always computable (they are
+deterministic rules over a differential history), and only PCC stays out of
+reach — it needs the whole field's scoring from that day, and is zero on most of
+them. At that point the honest position changes to: compute it, never present it
+as issued, and never let it displace typical and potential, which stay
+percentiles because percentiles answer the question better. See "The replacement
+rule" in `ROADMAP.md`.
+
+Whatever happens there, **this file's job is unchanged**: whichever figures are
+on screen, each one says here how it was worked out and what it is known to get
+wrong.
+
 ### It uses Gross Score, not Adjusted Gross Score
 
 The WHS caps every hole at net double bogey before computing a differential.
 We use the score on the card, and you are never asked to adjust anything.
 
-Partly that is circular to compute — net double bogey needs a Course Handicap,
-which needs an index we do not have. Mostly it is that **we are answering a
-different question**. AGS exists to keep one disaster hole from wrecking a
-handicap that other people will give strokes against. Nobody asks what they
-would have shot if their triple had been capped. Asked what you usually shoot,
-the honest answer is the number on the card.
+The blocking reason is simply that **a total does not contain the hole scores
+the cap needs**. It is *not* that the cap is circular to compute: net double
+bogey needs a Course Handicap, which needs an index, but the WHS resolves that
+recursively — each round is capped against the index held before it, with early
+rounds uncapped as the base case. That traversal is exactly what `played_on`
+ordering already does here.
+
+The second reason stands on its own: **we are answering a different question**.
+AGS exists to keep one disaster hole from wrecking a handicap that other people
+will give strokes against. Nobody asks what they would have shot if their triple
+had been capped. Asked what you usually shoot, the honest answer is the number
+on the card — so even with hole scores, the gross figure remains the one that
+headlines, with the capped one beside it.
 
 What it costs, over 4,000 simulated rounds per player:
 
@@ -219,9 +240,14 @@ two golfers a handicap system would rate 0.24 apart can come out 2.4 apart here,
 because the bias scales with how often each of them blows up.
 
 So these figures are for comparing you with yourself. Giving strokes in a match
-needs Adjusted Gross Scores from everyone, or an official index the group agrees
-on. `course_handicap` and `playing_handicap` remain in `handicap.py` for that
-day; they take an official index typed in on the day, never one we derive.
+needs capped scores from everyone in it, or an official index the group agrees
+on. Note which half does the work: **the cap is the fix, not the index.** A
+figure computed as best-8-of-20 over uncapped scores allocates strokes exactly
+as unfairly as a percentile over them does.
+
+`course_handicap` and `playing_handicap` remain in `handicap.py` for that day.
+They take an index typed in or, once scores are capped, one we derive — but the
+uncapped figures on today's screens are never eligible.
 
 ## 6. Known biases, in one table
 
@@ -231,7 +257,7 @@ asserted; the runs are described in `ROADMAP.md`.
 | Effect | Size | Direction | Who it hits |
 |---|---|---|---|
 | Small-sample bias in the 20th percentile | +0.18 strokes | potential reads slightly high, so the gap to typical reads narrow | everyone; larger below 20 rounds |
-| Gross instead of Adjusted Gross | +1.8 to +2.6 on typical | typical reads high, gap reads wide | anyone who blows up |
+| Gross instead of Adjusted Gross | +1.8 to +2.6 on typical | typical reads high, gap reads wide | anyone who blows up; removable only with hole scores |
 | Nine-hole scaling (sqrt(2)) | +0.18 on potential | same as the 20-round floor above | unchanged by nine share |
 | Nine-hole scaling, if doubled instead | −0.23 | potential would read flatteringly low | not used |
 | Nine-hole scaling, WHS mean-fill instead | +0.53 | potential would read low | not used |

@@ -18,8 +18,8 @@ The WHS writes the first one with *Adjusted* Gross Score, and this app does not
 use one. See "Gross, not Adjusted Gross" below -- a deliberate choice, not a
 missing step.
 
-The app computes no Handicap Index
-----------------------------------
+No Handicap Index -- while a round is only a total
+-------------------------------------------------
 There is no `potential_score(handicap_index, ...)` here, and there was: it took
 an index and returned the score that index posts when it plays well. The index
 argument was the problem. An index is the mean of the best 8 of your last 20
@@ -34,12 +34,22 @@ differentials and typical is the median -- see the docstring in `scoring.py`.
 Neither needs an index, because a Score Differential does not: it is a function
 of the score, the rating, the slope and the PCC alone.
 
+Note what that argument rests on: the pieces are missing because a TOTAL cannot
+supply them. It is a statement about the data, not a principle, and it expires
+if hole scores are ever recorded -- the cap becomes computable, the safeguards
+always were, and an index gets computed then. It would still never be presented
+as an issued one, and it would still not be the basis for typical and potential,
+which stay percentiles because percentiles answer the question better. See "The
+replacement rule" in ROADMAP.md.
+
 `course_handicap` and `playing_handicap` survive that decision because they are
-not that. They convert an *official*, externally-issued index into strokes for
-a match -- a number a player reads off their GHIN account and types in on the
-day, never one this app derives. Allocating strokes between players is the one
-job our own figures may not do, and these two are how the future net match
-calculator does it without them.
+not that. They convert an index into strokes for a match -- today only an
+*official*, externally-issued one, read off a GHIN account and typed in on the
+day. The rule they enforce is about the CAP, not the naming: a figure derived
+from uncapped scores may not allocate strokes between players, because the
+blow-up bias cancels against yourself and does not cancel against someone else.
+An index over uncapped scores would be just as ineligible. These two are how the
+future net match calculator works once capped scores exist.
 
 Gross, not Adjusted Gross
 -------------------------
@@ -49,10 +59,13 @@ We feed it the score on the card, and the golfer is NOT asked to adjust anything
 
 Two reasons, and the second is the real one.
 
-The practical reason: net double bogey needs a Course Handicap, which needs a
-Handicap Index, which this app deliberately does not have. Asking a golfer to
-work it out by hand would also end the fifteen-second round entry that the whole
-score-only scope decision exists to protect.
+The practical reason: a total does not contain the hole scores the cap needs,
+and asking a golfer to work it out by hand would end the fifteen-second round
+entry that the whole score-only scope decision exists to protect. Not that the
+cap is circular -- net double bogey needs a Course Handicap, which needs an
+index, but the WHS resolves that RECURSIVELY: each round is capped against the
+index held before it, early rounds uncapped as the base case. That traversal is
+what ordering rounds by `played_on` already performs.
 
 The better reason: we are answering a different question. AGS exists to make
 competition fair -- it stops one disaster hole wrecking a handicap that other
