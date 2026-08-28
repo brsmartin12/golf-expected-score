@@ -87,6 +87,23 @@ async function postJson(path, body) {
   return response.json();
 }
 
+async function deleteJson(path) {
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { method: "DELETE" });
+  } catch {
+    throw new Error(
+      `Could not reach the API at ${API_URL}. Is the backend running?`,
+    );
+  }
+
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null);
+    throw new Error(describeError(response.status, problem));
+  }
+  // 204 No Content: there is deliberately no body to parse.
+}
+
 /** Every round this golfer has logged, most recently played first. */
 export function fetchRounds() {
   return getJson("/rounds");
@@ -156,4 +173,16 @@ export function createRound({ teeId, playedOn, grossScore, nine }) {
     // null means all eighteen holes; "front" or "back" names the nine played.
     nine: nine || null,
   });
+}
+
+/**
+ * Remove a round.
+ *
+ * Callers should refetch the list rather than splicing the row out. Deleting
+ * changes the verdict on every LATER round, because each is graded against the
+ * rounds before it and the population just changed — see the note on the
+ * endpoint in the backend.
+ */
+export function deleteRound(id) {
+  return deleteJson(`/rounds/${id}`);
 }

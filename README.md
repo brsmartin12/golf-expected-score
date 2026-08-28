@@ -180,6 +180,7 @@ from the type hints where you can fire real requests at the endpoints.
 | POST   | `/courses/{id}/tees` | Add tees to a course that already exists                     |
 | GET    | `/rounds`         | Your rounds, most recently *played* first                       |
 | POST   | `/rounds`         | Log a round and get the verdict in the same response            |
+| DELETE | `/rounds/{id}`    | Remove a round — the fix for a mistyped score                    |
 
 There is deliberately no calculator endpoint. Every number the app shows comes
 from a golfer's own rounds, so it hangs off `/rounds`:
