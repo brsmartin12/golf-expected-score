@@ -67,9 +67,17 @@ understandable steps over large one-shot generations.
 
 ## Scope decisions (settled — don't relitigate without a reason)
 - **Score-only entry.** A round is date + course + tee + total score, plus which
-  nine if it was not all eighteen. No hole-by-hole, no fairways/GIR/putts.
-  Data-entry friction is what kills golf apps; a round must stay a 15-second
-  entry.
+  nine if it was not all eighteen. Never fairways/GIR/putts/shot tracking — the
+  line is that nothing may require a golfer to record something they were not
+  already writing down. Data-entry friction is what kills golf apps; a round must
+  stay a 15-second entry. **Hole scores are the one reopened question** — they
+  are eighteen numbers off a card that already exists, not a new thing to track,
+  and they would unlock a capped score (which unblocks the match calculator) and
+  per-hole typical/potential. Note the cap is *net* double bogey, so it still
+  needs a handicap from somewhere — hole scores remove the arithmetic obstacle,
+  not the circularity. Optional and additive, never
+  required, and it is step 11. See Tier 6 in `ROADMAP.md` for the conditions
+  and the additive schema.
 - **Nine-hole rounds are first-class.** People play nine when time is short, and
   a round the app refuses to grade is a round they stop logging. A nine is rated
   against that nine's own published Course Rating and Slope, then folded onto
@@ -83,8 +91,12 @@ understandable steps over large one-shot generations.
   ones — so they are built with auth at step 10, not before. See Tier 5 in
   `ROADMAP.md` for the schema and the three problems the leaderboard has to
   solve that the schema cannot.
-- **Headline feature is the current-form index** (step 7 below). Earlier steps
-  exist to make it possible.
+- **The headline is the stat book** (step 7 below): the golfer's own scoring
+  distribution, with current form read against it. Current form was the headline
+  on its own until it became clear the distribution is what makes it legible —
+  "playing like an 85" means nothing to someone who has not seen what "usually"
+  looks like. Earlier steps exist to make it possible. See "The axis nobody is
+  on" in `ROADMAP.md`: their unit of analysis is the round, ours is the golfer.
 - **Two moments, not one app.** Before the round (what should I shoot here,
   read-only) and after it (log in 15 seconds, get an instant verdict). Both
   happen at the course on a phone, often on bad signal. Every screen and
@@ -101,7 +113,11 @@ understandable steps over large one-shot generations.
 - **A number is not a claim.** A per-course figure, shrunk toward your overall
   one, is defined from the first round and is always shown. An assertion about a
   difference — "this course is hard for you" — waits for evidence. Never gate a
-  number behind the threshold that belongs to a claim.
+  number behind the threshold that belongs to a claim. This generalises: every
+  claim carries its own confidence, and saying "that is noise, keep logging" is
+  the app's real differentiator, not a caveat on it. Golf apps imply confidence
+  they have not earned; refusing to is what makes the unhedged numbers worth
+  believing.
 
 ## Build order (do not skip ahead)
 1. Pure Python calculation functions (potential score, differential) + pytest
@@ -136,10 +152,17 @@ understandable steps over large one-shot generations.
    come: round percentile ("you shoot this or better 26% of the time"),
    what-if projection ("shoot 84 and your typical goes 89.2 → 88.9"),
    cross-course score translation, pre-round target card.
-7. **Current form** — the headline. Recency-weighted estimate of centre and
-   spread over your differentials, shown against the flat 20-round figures
-   ("usually 88, playing like an 85"), plus consistency as a first-class stat
-   and trends reported with honest error bars.
+7. **The stat book** — the headline, and the app's home screen, which today is
+   a form and should not be. Four things in order: typical and potential big at
+   the top; **the distribution** underneath — the last 20 differentials as marks
+   with both quantiles picked out, which is the picture that explains why a
+   handicap sits below what you usually shoot; current form against the flat
+   figure ("usually 88, playing like an 85"); and what the app does not know yet.
+   Around them: range (typical − potential) as the consistency reading, blow-up
+   rate, rust, nine-versus-eighteen, and records. Trends always with honest error
+   bars. The distribution comes *before* current form deliberately — "playing
+   like an 85" is meaningless until you have seen what "usually" looks like.
+   See Tier 3 in `ROADMAP.md`.
 8. Course fit, done honestly: per-course and per-tee strokes-vs-potential,
    shrunk toward zero with confidence intervals, so "this course suits your
    game" is only claimed when the data supports it — and says "need 4 more
@@ -167,7 +190,19 @@ understandable steps over large one-shot generations.
     metric is a pure function over differentials and belongs in `backend/golf/`
     with step 7, since it shares the same recency-weighted machinery; only the
     grouping and the screen wait for step 10. See Tier 5 in `ROADMAP.md`.
-11. (Future) Automatic integration to pull slope and rating values for courses
+11. **Hole-by-hole scores, if they earn it.** Optional per round, never
+    required, and nothing in steps 6–8 may come to depend on them: a round with
+    a total and no holes stays first-class. What they unlock is specific — real
+    a capped score (which removes the measured gross-score bias in `METHOD.md`
+    and is what currently blocks the step 10 match calculator, though net double
+    bogey still needs a handicap from somewhere),
+    typical and potential *per hole*, and the gap between your round potential
+    and the sum of your per-hole potentials, which measures how much of your good
+    golf is available on the same day. Two additive tables, `holes` and
+    `hole_scores`; nothing existing changes. The gate is the entry screen: if
+    eighteen holes cannot be entered about as fast as a total, it does not ship.
+    See Tier 6 in `ROADMAP.md`.
+12. (Future) Automatic integration to pull slope and rating values for courses
     from their various tee boxes; real PCC from historical weather.
 
 ## Project layout
