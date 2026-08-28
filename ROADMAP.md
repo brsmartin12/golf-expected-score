@@ -809,6 +809,98 @@ rather than merely fun.
 - Apply the same treatment **per tee**, and optionally grouped by course length or
   rating band — which starts to answer *why* a course fits, not just *that* it does.
 
+## The auth plan
+
+Written down before it is built, because the decision that is hard to reverse
+sits in the schema and the one that looks hard to reverse is not.
+
+### Every provider looks the same from the backend
+
+The frontend gets a JWT, sends it as `Authorization: Bearer ...`, and the
+backend verifies the signature against the provider's published keys, then reads
+the `sub` claim (a stable user id) and `email`. That is roughly thirty lines
+whichever provider is chosen, so the choice is about the frontend SDK and the
+bill — not the architecture.
+
+| | |
+|---|---|
+| **Supabase Auth** | Bundled with Supabase Postgres. If the database is there, auth already is too — one vendor |
+| **Clerk** | Auth only, polished drop-in React components, least frontend work |
+| **Auth0** | Mature, more configuration surface than this needs |
+| **Roll our own** | **No.** Password hashing, reset-token expiry and single use, timing-safe comparison, session fixation, user enumeration on the reset endpoint. All solved problems whose failure modes are silent |
+
+Google sign-in either way: no passwords to hold, and it supplies a *verified*
+email, which the migration below depends on.
+
+### The part that IS expensive to reverse
+
+Identity keys on the provider's `sub`. Change provider and every `sub` changes,
+orphaning everyone's history.
+
+**So store `auth_subject` alongside `email`.** A provider migration then
+re-links by email. One nullable column now, and the difference between swapping
+providers in an afternoon and not being able to.
+
+### Claiming the backfilled rounds
+
+The hand-entered history will belong to the dev row. Signing in afterwards
+creates a *new* user, leaving thirty rounds stranded on the old one.
+
+No data migration is needed if the lookup is ordered properly:
+
+1. by `auth_subject` — the returning user, fast path
+2. by **verified** email — link the subject onto that row
+3. otherwise create a new user
+
+Step 2 claims the existing history on first sign-in. All it takes is setting the
+dev row's email to the real one before deploying.
+
+**The security requirement in step 2 is easy to miss.** Matching on email means
+whoever controls the email controls the account — fine and standard, but only if
+the provider *verified* it. The `email_verified` claim must be checked, not just
+`email` read. A provider handing over an unverified address turns step 2 into
+account takeover.
+
+### What changes
+
+Backend: `users.auth_subject` (unique, nullable so the dev row survives) and a
+migration; a new `api/auth.py` that caches the provider's keys and verifies
+signature, issuer, audience and expiry; `get_current_user` doing the three-step
+lookup; CORS origins from an environment variable; one dependency.
+
+Frontend: the provider SDK, a sign-in screen, a route guard, and the token
+attached to every request. Note that only `postJson` sets headers today —
+`getJson` and `deleteJson` set none — so this wants centralising rather than
+three separate edits.
+
+**What does not change: any route.** Every one of them already asks
+`get_current_user` who this is and gets a `User` back. That was the entire point
+of putting the seam in at step 4 rather than letting routes assume a single
+golfer. The tests do not change either — the two that override the dependency
+keep working exactly as they do now.
+
+### Local development must not need an auth server
+
+Signing in constantly to work on the app is miserable, and the test suite cannot
+hold a token. So the dev seam stays, gated on configuration.
+
+**Default to requiring auth and opt out explicitly for local.** Not the reverse.
+If the flag is missing in production the app must refuse requests rather than
+serve them openly. Fail-safe, not fail-open — the inverted version of this is
+exactly how applications ship wide open.
+
+### Order
+
+1. Backend auth, invisible: column, migration, verification, CORS from env.
+2. Frontend sign-in.
+3. Deploy, with the dev row's email already set to the real one.
+4. Invite people — after settling course governance, since that is the moment
+   someone else's typo starts moving your numbers.
+
+Groups and the boards are a separate job. Five golfers can each have an account
+and use the app alone; leaderboards are Tier 5 below and are not required to
+share it.
+
 ## Tier 5 — Social
 
 This is where "me + golf friends" pulls auth forward from its original step 6.

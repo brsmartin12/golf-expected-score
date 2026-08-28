@@ -150,7 +150,10 @@ understandable steps over large one-shot generations.
    Dockerfile — see "Deployment, and keeping dev and prod the same thing" in
    `ROADMAP.md`, which also lists what the repo has to pin and lock first.
 10. Auth (Supabase Auth or Clerk) + groups, so friends can use it with their
-    own data. Then two group boards — a **form table** ranked on who is playing
+    own data. Auth and groups are separate jobs — accounts are what sharing the
+    app needs, boards are extra. See "The auth plan" in `ROADMAP.md`, which
+    covers claiming the backfilled rounds without a data migration and the
+    `email_verified` requirement that makes it safe. Then two group boards — a **form table** ranked on who is playing
     better than their *own* normal right now, and a **season table** ranked on
     the rate of rounds that beat your potential (the *rate*, not the average:
     the average gap to potential is ≈ 0.93σ, a fixed multiple of the player's
