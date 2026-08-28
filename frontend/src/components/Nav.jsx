@@ -1,8 +1,13 @@
 /**
- * The app's navigation: three tabs, fixed to the bottom.
+ * The app's navigation: three tabs, at the bottom on a phone and along the top
+ * on a desktop.
  *
- * Bottom rather than top because both of the app's moments happen on a phone,
- * often one-handed — the bottom of the screen is where a thumb reaches.
+ * Bottom on a phone because both of the app's moments happen there, often
+ * one-handed — the bottom of the screen is where a thumb reaches. On a desktop
+ * there is no thumb and no reach problem, and a full-width bar pinned to the
+ * bottom of a 24-inch screen is the single thing that made the app look like an
+ * enormous phone. The move is done in CSS with `order`, not with two
+ * components: same markup, same tab state, one media query.
  *
  * `NavLink` is React Router's link that knows whether it is the current route.
  * It hands `isActive` to a className function, which is how the current tab
@@ -36,7 +41,7 @@ const TABS = [
   },
 ];
 
-export default function BottomNav() {
+export default function Nav() {
   return (
     <nav className="nav">
       {TABS.map(({ to, label, icon }) => (

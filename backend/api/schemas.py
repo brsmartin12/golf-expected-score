@@ -130,6 +130,29 @@ class CourseCreate(BaseModel):
     tees: list[TeeCreate] = Field(..., min_length=1)
 
 
+class TeeUpdate(BaseModel):
+    """Corrections to a tee's ratings. Every field optional; omitted means keep.
+
+    This exists because the operation it performs was unreachable. A tee entered
+    with only its 18-hole figures could never gain its nine-hole ones, so the
+    only way to record a front nine was to invent a second tee -- which is the
+    wrong shape, because the front nine is not a different tee, it is the same
+    tee played over nine holes. That is how a real backfill ended up with two
+    copies of one course.
+
+    Name and par are deliberately absent: they identify the tee. Ratings are
+    facts about it that can be typed wrong, and a wrong slope silently shifts
+    every round ever played from it — so correcting one has to be possible.
+    """
+
+    course_rating: float | None = Field(None, gt=0, le=90)
+    slope_rating: int | None = Field(None, ge=MIN_SLOPE, le=MAX_SLOPE)
+    front_course_rating: float | None = Field(None, gt=0, le=50)
+    front_slope_rating: int | None = Field(None, ge=MIN_SLOPE, le=MAX_SLOPE)
+    back_course_rating: float | None = Field(None, gt=0, le=50)
+    back_slope_rating: int | None = Field(None, ge=MIN_SLOPE, le=MAX_SLOPE)
+
+
 class TeeRead(BaseModel):
     """A tee as returned by the API."""
 

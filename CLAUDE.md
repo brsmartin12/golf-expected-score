@@ -274,6 +274,17 @@ later and nothing needs moving.
   otherwise a formula fix leaves the database disagreeing with the code. This is
   also why a round is graded by `_read_models` over the whole series rather than
   row by row: its verdict depends on the rounds around it, not on itself.
+- **The phone layout is the default; desktop is one media query.** Both of the
+  app's moments happen at the course, so every screen is written mobile-first
+  and `@media (min-width: 48rem)` in `index.css` adapts it — the column widens
+  and the navigation moves from the bottom of the screen to the top. Not two
+  components and not two stylesheets: a new screen gets the desktop treatment
+  for free, and there is one place to look when it doesn't.
+- **Never fake a font weight.** `font-synthesis: style` on `body` is load-
+  bearing. Archivo Black is a single face declared at weight 400, so a request
+  for 900 made the browser smear it wider and the verdict number's digits ran
+  together. Display rules still ask for 900 — that is for the fallback stack —
+  and the synthesis rule is what stops it being applied to the real face.
 - Prefer explicit, readable code over clever one-liners; this is a learning
   project.
 - Update this file when a decision changes (e.g. swapping Railway for

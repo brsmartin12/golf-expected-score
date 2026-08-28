@@ -40,8 +40,15 @@
   /* Loaded from Google Fonts in index.css. Both stacks name real fallbacks
      because the fonts are fetched over the network, and this app is used at
      golf courses where there may not be one — see the connectivity note in
-     ROADMAP.md. Archivo Black is a single 900-weight family, so anything using
-     --font-display also sets font-weight: 900, or the fallback renders thin.
+     ROADMAP.md.
+
+     Archivo Black is a single face, and Google Fonts declares it at weight
+     400: it is black by drawing, not by weight number. Display rules still ask
+     for font-weight: 900, so that a FALLBACK stack reaches for its own heaviest
+     real face — but index.css sets `font-synthesis: style` on body so the
+     browser never fakes the weight when the real Archivo Black is what it has.
+     Without that it smeared the face wider and the verdict number's digits ran
+     together at 86px.
 
      Worth self-hosting before deploying: it removes a third-party request from
      the critical path and means the typography survives a cold load on bad
@@ -81,6 +88,20 @@
   --tap: 44px;
 
   --page-max: 32rem;
+}
+
+/* Desktop. A 32rem column with a full-width bar pinned to the bottom of a
+   24-inch monitor reads as an enormous phone, which is exactly what the first
+   real user saw. Widening the column is half the fix; index.css moves the
+   navigation to the top for the other half.
+
+   40rem rather than "as wide as the screen": the app is a stack of cards and a
+   form, and a text input the width of a desktop monitor is worse than a narrow
+   one, not better. */
+@media (min-width: 48rem) {
+  :root {
+    --page-max: 40rem;
+  }
 }
 
 /* Scaffolded, not yet reachable from the UI: set data-theme="light" on <html>

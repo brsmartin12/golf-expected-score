@@ -15,6 +15,21 @@ body {
   line-height: 1.5;
   /* Stops iOS inflating text when the phone is turned to landscape. */
   -webkit-text-size-adjust: 100%;
+  /* Never fake a weight the font does not have. This is inherited, so it
+     covers everything.
+
+     It is here because of a real bug. Archivo Black ships as ONE face, and
+     Google Fonts declares it at font-weight 400 — it is "black" by design, not
+     by weight number. Every display rule in this file asks for 900, so the
+     browser had nothing to match and smeared the 400 face wider to fake it.
+     At 86px, with the verdict number's negative tracking on top, the digits
+     ran into each other, which is exactly what the first desktop user saw.
+
+     `font-synthesis: style` (rather than the newer font-synthesis-weight,
+     which older Safari does not know) says: synthesise italics if you must,
+     never weight. Asking for 900 then renders the real face untouched, and a
+     fallback stack picks its own genuine bold instead of a smeared one. */
+  font-synthesis: style;
 }
 
 /* ---- Shell ---------------------------------------------------------------
@@ -76,12 +91,17 @@ body {
   margin-bottom: var(--space-5);
 }
 
+/* The tracking here and on .verdict__headline is gentler than it was. Turning
+   off weight synthesis above is what actually fixed the collision, but Archivo
+   Black has tight sidebearings of its own and the app has to survive rendering
+   in a fallback face on a bad signal at a course. -0.04em had no margin for
+   that; this does, and the difference is not visible side by side. */
 .page__title {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 900;
   font-size: var(--text-xl);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 .page__sub {
@@ -416,7 +436,7 @@ body {
   font-weight: 900;
   font-size: var(--text-hero);
   line-height: 0.94;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
@@ -711,4 +731,70 @@ body {
 .button--danger {
   background: var(--danger);
   color: var(--bg);
+}
+
+/* ---- Desktop -------------------------------------------------------------
+   Everything above this line is the phone layout, which is the right default:
+   both of the app's moments happen at the course. This block is what stops a
+   24-inch monitor showing a 24-inch phone.
+
+   Two changes do nearly all of the work. The column widens (see --page-max in
+   tokens.css), and the navigation moves from a bar pinned across the bottom of
+   the screen to a bar across the top — which is where a desktop app puts it,
+   and where a mouse expects it. `order: -1` does the move: .nav comes after
+   <main> in the markup, which is correct for a phone and for reading order,
+   and flex `order` repaints it above without touching the DOM. */
+@media (min-width: 48rem) {
+  .nav {
+    order: -1;
+    top: 0;
+    bottom: auto;
+    justify-content: center;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-4);
+    border-top: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  /* Tabs stop stretching edge to edge and become buttons of their own size,
+     centred over the content column below them. */
+  .nav__tab {
+    flex-grow: 0;
+    flex-direction: row;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius);
+  }
+
+  .nav__tab:hover {
+    color: var(--ink);
+  }
+
+  .nav__tab--on,
+  .nav__tab--on:hover {
+    color: var(--accent-ink);
+    background: var(--accent);
+  }
+
+  .nav__label {
+    font-size: var(--text-sm);
+    letter-spacing: 0.04em;
+  }
+
+  .shell__body {
+    padding: var(--space-8) var(--space-5);
+  }
+
+  .card {
+    padding: var(--space-5);
+  }
+
+  .round {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  /* The rounds list stays ONE column, deliberately, though there is width for
+     two. It is in date order, and a date order read left-to-right-then-down is
+     harder to follow than the same list read straight down — the extra width is
+     better spent on rows that do not wrap. */
 }

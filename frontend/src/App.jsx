@@ -14,7 +14,7 @@
  */
 import { Outlet } from "react-router-dom";
 
-import BottomNav from "./components/BottomNav.jsx";
+import Nav from "./components/Nav.jsx";
 
 export default function App() {
   return (
@@ -22,7 +22,7 @@ export default function App() {
       <main className="shell__body">
         <Outlet />
       </main>
-      <BottomNav />
+      <Nav />
     </div>
   );
 }

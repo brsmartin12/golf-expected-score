@@ -66,7 +66,7 @@ DEV_ORIGINS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=DEV_ORIGINS,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 
