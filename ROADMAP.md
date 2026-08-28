@@ -145,6 +145,61 @@ a claim with no evidence behind it is not shown at all.** The number is always
 shown; the assertion about the number waits. That rule already exists for course
 fit — it generalises to everything.
 
+## Who this is for, in two grades
+
+The app started out for *a golfer and their friends who want to know whether
+that 88 was any good*. The ambition has since grown into **a comprehensive stat
+book** — one that shows how well you can play, how well you typically play, and
+why it is that way. Those are different products for different people, and the
+change is deliberate rather than drift.
+
+The instinct on hearing it is to pick one. **Don't.** They are two grades of the
+same app, over one schema, and supporting both costs less than it looks.
+
+| | Grade 1 — the total | Grade 2 — the card |
+|---|---|---|
+| Entry | date, course, tee, score. 15 seconds | the above plus 18 hole scores |
+| Who | anyone; every golfer on their first day | the golfer who wants to know why |
+| Gets | typical, potential, range, form, trend, percentile, course and tee fit, blow-up rate, rust | all of that, plus per-hole quantiles, par-type and yardage breakdowns, a capped score, an index, the match calculator |
+
+Three reasons both stay, and none of them is charity toward casual users:
+
+1. **Grade 1 is the on-ramp and the import path.** A stat book with four rounds
+   in it says nothing, and cold start does not care how motivated the user is.
+   You can enter 30 totals from memory in fifteen minutes; you cannot
+   reconstruct 30 scorecards. Score-only is what makes a history exist at all on
+   day one — that is what it is *for*, not a concession.
+2. **The data will be mixed-grade whatever the user intends.** Hole scores are
+   only reliably capturable during the round or off a physical card. Log three
+   days later and there is a total and a vague memory. A design that assumes
+   uniform depth will be wrong about its own user.
+3. **Every stat already has to say what it drew from.** That discipline is the
+   honesty rule from "the axis nobody is on", and it is what makes two grades
+   nearly free: *"your typical on par 5s, from the 14 rounds with holes"* is the
+   same sentence shape the app already owes for *"from your last 20 rounds"*.
+
+**The rule that keeps it honest: nothing on the Tier 3 home screen may require
+Grade 2.** The moment a headline number needs hole scores, the golfer who logs
+totals has lost the app, and grade 1 stops being an on-ramp and becomes a
+waiting room.
+
+### On entry fatigue, revisited
+
+"Data-entry friction kills golf apps" is real but was over-applied. It is drawn
+from mass-market consumer apps, and a stat book is not one — for an enthusiast,
+entry is engagement rather than friction. Strava users log everything.
+
+Two things that stay true anyway, since the willingness of the user does not
+repeal them:
+
+- **A willing user still abandons a bad screen.** "Wants to enter hole scores"
+  is not "will tolerate eighteen number inputs on a phone in a car park." The
+  design bar goes *up*, not away. See the entry condition in Tier 6.
+- **The line on what may be asked for does not move.** Nothing may require
+  recording something the golfer was not already writing down. Hole scores are
+  on the card; fairways, putts and shot positions are not. That is the whole
+  distinction, and it is not about how keen the user is.
+
 ## Design decisions already made
 
 | Decision | Choice | Consequence |
@@ -154,7 +209,7 @@ fit — it generalises to everything.
 | Audience | **Me + golf friends** | `user_id` in the schema from day one; auth moves earlier than originally planned |
 | Form factor | **Mobile first, desktop too** | Round entry happens on a phone; see below. Constrains layout and charts from Tier 1 on |
 | Naming | **"Potential", never "expected"** | Potential is the 20th percentile of your differentials — a good round, not a typical one. `potential_score` / `to_potential` throughout, with `typical_score` / `to_typical` beside them for the median |
-| Handicap index | **The app computes none, and labels nothing one** | Both figures are percentiles instead. See "Stop computing an index at all" below; this is why `handicap_snapshots` and `rounds.index_at_time` do not exist |
+| Handicap index | **None while a round is a total; computed once hole scores exist, and never presented as issued** | Typical and potential stay percentiles regardless — they are the better numbers, not a substitute. The original ban was an argument about missing data wearing the costume of a principle; see "When the condition is met" below. Still derived on read, so `handicap_snapshots` and `rounds.index_at_time` stay gone |
 | Display convention | **Golf's to-par orientation, for every stroke number in the app** | A minus sign already means "under par" to a golfer, so negative is always the good direction and positive always the bad one — on the round card, the form table, the season table, and anything added later. `to_typical` and `to_potential` in the API carry that orientation. An analysis primitive may run the opposite way where higher-is-better averages more naturally, but is then never shown raw. If a new number cannot be expressed with negative-is-better, that is a signal it is the wrong number to put on a screen |
 
 ---
@@ -446,16 +501,26 @@ The bias corrupts exactly one thing: a number labelled "handicap" sitting next
 to a different number in the GHIN app. That is a naming problem, not a maths
 problem — the same lesson as renaming "expected" to "potential".
 
-### What follows: stop computing an index at all
+### What follows: no index — while a round is only a total
+
+**This rule has a condition, and Tier 6 satisfies it. Read to the end before
+citing it.**
 
 Naming the figure carefully is not enough on its own. If the app computes
 best-8-of-20 and calls it something else, the first person to ask "so how is
 this worked out?" gets an answer that is recognisably the handicap formula with
-pieces missing — which reads as a half-finished implementation rather than a
-deliberate different measure.
+pieces missing — no net double bogey cap, none of the WHS safeguards — which
+reads as a half-finished implementation rather than a deliberate different
+measure.
 
-So the app does not compute an index. **Potential is a percentile of the
-golfer's own Score Differentials**, exactly as typical is their median:
+That argument is sound. Note carefully what it rests on: **the pieces are
+missing because a total cannot supply them.** It is an argument about the data,
+wearing the costume of an argument about principle, and it expires the moment
+the data arrives. See "when the condition is met" below.
+
+So, while a round is a total: the app does not compute an index. **Potential is
+a percentile of the golfer's own Score Differentials**, exactly as typical is
+their median:
 
 ```
 typical differential   = median (50th percentile) of the last 20
@@ -489,14 +554,83 @@ Three things follow:
    nullable column on `users`, added when something actually needs it.
 3. **`rounds.index_at_time` is dropped** for the same reason: with potential
    derived from the surrounding rounds, it is a breadcrumb pointing at a
-   calculation the app no longer performs.
+   calculation the app no longer performs. This survives the reversal below: a
+   computed index is derived on read like every other figure here, never stored.
 
-### The one thing this does NOT fix
+### When the condition is met: compute it
 
-**The app's figures still cannot allocate strokes between players.** The
-percentile framing removes the credibility problem; it does nothing about the
-fairness one, because the bias comes from gross scores containing blow-ups, not
-from the best-8 formula.
+With hole scores (Tier 6) the pieces stop being missing, and the argument above
+stops applying. Taking them one at a time:
+
+- **The net double bogey cap** becomes computable, because a hole score is what
+  it needs.
+- **The low-index safeguard and the exceptional-score reduction** were never the
+  obstacle. Both are deterministic rules over a differential history. Nothing
+  about either requires an association's blessing — only the history, which we
+  have.
+- **PCC** is the one genuinely unreachable piece: it needs the whole field's
+  scoring from that day. It is also zero on the overwhelming majority of days,
+  and Tier 7's weather-based approximation is an honest stand-in that can be
+  labelled as one.
+
+**The circularity is not real, and this is the part that was got wrong once
+already.** Net double bogey needs a Course Handicap, which needs an index,
+which appears to need the cap — but the WHS resolves this *recursively, not
+simultaneously*. Today's round is capped using the Course Handicap derived from
+the index you held **before** it. There is a base case (early rounds go in
+uncapped) and it unwinds forward from there.
+
+That is not a workaround. It is how the handicap authority itself does it — and
+the machinery is already here, built for another reason. `played_on` ordering
+and grading every round on the rounds played before it is *exactly* the shape an
+iterative cap needs. The point-in-time discipline in Tier 1 turns out to have
+paid for this too.
+
+### The replacement rule
+
+The old rule was a proxy. What it was protecting is worth stating directly:
+
+> **A handicap's authority comes from the body that issues it, not from the
+> arithmetic that produces it.**
+
+So the rule is no longer "compute no index." It is:
+
+1. **Compute it, once hole scores make it complete.** Not before — an incomplete
+   one is exactly what the original argument was about.
+2. **Never present it as issued.** Not "your Handicap Index." Something that
+   reads as ours and unofficial, shown beside a GHIN figure rather than instead
+   of one. The naming discipline that produced "typical" and "potential" applies
+   here with more force, not less.
+3. **Never let it become the basis for typical and potential.** Those stay
+   percentiles because percentiles are the better numbers for the question being
+   asked — the median is beaten exactly half the time by construction, which
+   best-8-of-20 is not. They were never percentiles *because* an index was
+   forbidden, and nothing about this reversal touches them.
+
+**What it is actually for**, in descending order of value:
+
+- **An input.** The cap needs it, and the cap is what removes the bias in the
+  table below.
+- **The comparison line.** *"GHIN has you at 12.4. We make it 12.1 — here is
+  where the difference comes from."* Explaining a divergence honestly is a
+  better feature than hiding it, and no other app attempts it.
+- **The match calculator.** See below; this is what unblocks it.
+
+**One warning that is social rather than technical.** A computed index that
+differs from GHIN by a stroke, used to allocate strokes in a money match, is how
+friend groups have arguments. Show both figures and let the group choose which
+they are playing off. Never make that choice for them silently.
+
+### The one thing this does NOT fix — until the scores are capped
+
+**The app's figures cannot allocate strokes between players.** The percentile
+framing removes the credibility problem; it does nothing about the fairness one,
+because the bias comes from gross scores containing blow-ups, not from the
+best-8 formula. Renaming the number does not un-blow-up the round.
+
+Which is why capping matters more than computing: **the cap is the fix here, not
+the index.** An index over uncapped scores allocates strokes exactly as unfairly
+as a percentile over them does.
 
 Simulated with two players of genuinely equal ability — same mean score, one
 steady and one streaky:
@@ -510,13 +644,19 @@ GHIN rates them 0.24 strokes apart. We rate them 2.4 apart. In a match the
 streaky player would collect **over two strokes they have not earned** — which is
 precisely the abuse the net double bogey cap exists to prevent, reintroduced.
 
-So the rule is about **use**, not naming: *the app's own figures never allocate
-strokes between players.* Everything self-referential — typical, potential, form
-delta, course fit, percentile — is fine, because the same bias sits on both
-sides of the comparison. Anything giving one golfer strokes against another
-needs either Adjusted Gross Scores entered by everyone, or an official index the
+So the rule is about **use**, not naming: *figures derived from uncapped scores
+never allocate strokes between players.* Everything self-referential — typical,
+potential, form delta, course fit, percentile — is fine, because the same bias
+sits on both sides of the comparison. Anything giving one golfer strokes against
+another needs capped scores from everyone in the match, or an official index the
 group agrees on. `course_handicap` and `playing_handicap` stay in `handicap.py`
 for that day, unused by the core loop until then.
+
+Note what "from everyone" means in practice: the match calculator works for a
+group only when **every player in it** has entered holes. One friend who logs
+totals does not degrade their own stat book at all, but they cannot be given
+strokes by this app. Saying so plainly at the point of use is the honest
+handling; silently falling back to an uncapped figure is not.
 
 **Worth testing when it is built:** the season table's beat-rate compares players
 and derives from each one's own potential. Whether the blow-up bias contaminates
@@ -1903,46 +2043,39 @@ what separate this from the feature that kills the app.
 
 ### What hole scores would unlock
 
-The point is not "more stats." Four specific things become possible for a single
-golfer that are impossible from a total, and two more once there are many
-golfers. Several of them are things nobody ships.
+The point is not "more stats." Four things become possible for a single golfer
+that are impossible from a total, two more once there are many golfers, and one
+that reverses a decision this document spent a whole section making. Several are
+things nobody ships.
 
 1. **Real Adjusted Gross Score.** The WHS caps each hole at net double bogey. We
    cannot compute that from a total, so we take the card — and carry a measured
    bias for it: typical reads 1.8–2.6 strokes high for a player who blows up,
    while potential barely moves. See `METHOD.md`. With hole scores that bias
-   simply goes away — *with one honest caveat*, below.
+   simply goes away.
 
-   **The caveat: the cap is NET double bogey.** Par + 2 + the handicap strokes
-   you receive on that hole, which needs a Course Handicap, which needs an index
-   — and this app computes none. Hole scores remove the *arithmetic* obstacle,
-   not the circularity, so this is a real decision rather than a free win. Three
-   ways out, none obviously right:
-   - **Take an official index the golfer types in.** Honest, externally sourced,
-     and already the stated basis for `course_handicap` in `handicap.py`. Costs a
-     field and only works for golfers who have one.
-   - **Use potential as the strokes-received basis.** Defensible — potential is
-     roughly what an index measures — but it is index-shaped, and the project's
-     rule is that nothing may be *labelled* an index. Using one internally
-     without showing it is a different thing from publishing one, and that line
-     needs drawing deliberately rather than by accident.
-   - **Cap at gross double bogey instead**, with no handicap strokes at all.
-     Not the WHS's number and must never be called AGS, but it is
-     non-circular, needs nothing external, and removes most of the blow-up tail
-     the bias table is about.
+   The cap is *net* double bogey — par + 2 + the strokes you receive on that
+   hole — which needs a Course Handicap, which needs an index. That looks
+   circular and is not: **the WHS resolves it recursively.** Today's round is
+   capped against the index you held *before* it, early rounds go in uncapped as
+   the base case, and it unwinds forward. See "when the condition is met" above,
+   which also notes that `played_on` ordering already implements exactly this
+   traversal.
 
-   Whichever is chosen, `METHOD.md` gets the reasoning and the measured
-   difference, and both figures should be shown: what you shot, and what the
-   capped version counts.
+   Show both figures once it exists: what you shot, and what the capped version
+   counts. The difference is interesting in itself — it is a direct measure of
+   how much of your score is disasters.
 2. **Stroke allocation between players.** Today the app refuses to allocate
    strokes in a match, and the refusal is correct: the gross-score bias cancels
    in every self-referential comparison and does *not* cancel between people, so
    two golfers GHIN rates 0.24 apart can come out 2.4 apart here. A capped score
    removes exactly that objection, since the bias it removes is the one that does
    not cancel between people. **The Tier 5 match calculator is blocked on this**,
-   and it is the strongest single argument for the tier — subject to the caveat
-   above, since a match calculator built on a stand-in index is a match
-   calculator built on a number the app refuses to publish.
+   and it is the strongest single argument for the tier.
+
+   The constraint to design around: it works for a group only when *every*
+   player in the match has entered holes. Say so at the point of use rather than
+   quietly substituting an uncapped figure.
 3. **Typical and potential per hole.** The app's whole idea, applied one level
    down: *"your typical on 7 is 5.2, your potential is 4."* Nobody has seen that
    either, and it is the same two quantiles over a different population — the
@@ -1962,6 +2095,43 @@ Two more that need scale rather than one golfer:
 6. **Where the strokes go.** Distribution of hole scores against par, by par
    type. *"You are level with your potential on par 3s and 1.4 strokes worse on
    par 5s"* is a practice plan, from data you already wrote on the card.
+
+7. **An index of our own** — see "the replacement rule" above. Complete once the
+   cap exists, never presented as issued, and shown beside a GHIN figure rather
+   than instead of one.
+
+### How far "why" actually reaches
+
+The ambition for this tier is the third question a stat book answers: not only
+how well you *can* play and how well you *typically* play, but **why it is that
+way**. It is worth being precise about how far the data reaches, because the
+honest boundary is closer than it feels and the ground before it is richer than
+it looks.
+
+**Score-only says *what* and *when*. Hole scores say *where*. Neither says why
+in the causal sense** — that needs shot-level data (where each shot finished),
+which is strokes gained, which is out of scope permanently and for good reason.
+
+But hole scores plus the hole metadata stored alongside them — par, yardage,
+stroke index, all printed on the card — get remarkably close:
+
+- **Par type.** Performance on par 3s against par 5s separates approach play
+  from the long game without measuring either directly.
+- **Yardage.** Score against hole length is a distance-sensitivity reading, and
+  it is the one that most often tells a golfer to move up a tee.
+- **Stroke index.** Whether you hold up on the hard holes or leak strokes on the
+  easy ones. These are different players and they need different practice.
+- **Position in the round.** Holes 1–3 against 16–18: starts and finishes,
+  warm-up and nerve, from data that costs nothing extra.
+- **Per-hole variance against per-hole mean.** Which holes are your coin flips
+  and which are automatic.
+
+**And the one worth building the tier for: per-hole typical against per-hole
+potential, mapped over the course.** Some holes have no gap at all — typical and
+potential are the same number, and those are locked in. Others carry a stroke
+and a half, and that is where the round is actually decided. That is this app's
+central idea applied one level down, and it hands the golfer a practice plan
+rather than a diagnosis. Nobody ships it.
 
 ### The conditions
 
