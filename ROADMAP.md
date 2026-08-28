@@ -45,12 +45,112 @@ That gap is where the whole product lives:
   one who shoots 76–96 — are completely different golfers with the same handicap. The
   spread is half of what defines a player and nobody surfaces it.
 
+## The axis nobody is on
+
+The competition is 18Birdies and GHIN, and it is worth being precise about what
+they do — because the temptation is to compete where they are strong.
+
+18Birdies breaks a round down: driving accuracy, greens in regulation, putts,
+hole score distribution. GHIN gives you an index and the differentials behind it.
+18Birdies will also show an average score per course and compare a round's
+differential to your index, but you have to open a round to find either.
+
+Every one of those is a fact about **a round**. You played; here is what
+happened. Even the per-course average is an attribute of the round you happen to
+be looking at.
+
+This app has one number per round. On that axis it loses, permanently, and it
+should stop trying: their breakdowns rest on fairways, putts and shot positions,
+which is what turns a fifteen-second entry into a ten-minute one, and entry cost
+is what stops people logging. (Hole *scores* are a lighter ask than that, which
+is why Tier 6 exists — but they buy a different thing, not this.)
+
+But there is a second axis, and nobody is on it.
+
+> **Their unit of analysis is the round. Ours is the golfer.**
+
+Everything worth saying here needs *many* rounds and only one column. That is not
+a consolation prize for having less data. It is a different question, and it
+happens to be the question golfers actually argue about in the car park: *what
+kind of player am I, and am I getting better?*
+
+Typical versus potential is the first answer to it. The reason it is worth
+building is not that it is clever — it is that golfers say it out loud
+constantly ("I'm a 90s golfer but I can shoot 84") and have never once seen it
+drawn.
+
+### What only a distribution can say
+
+Thirty rounds are not thirty facts. They are a **shape**, and nothing in golf
+shows a player their own shape.
+
+- **The shape itself.** The last 20 differentials plotted, with typical and
+  potential marked on them. This is the picture that answers *"why is my handicap
+  12 when I shoot 90?"* — a question every golfer has and no app answers. A
+  handicap sits at the good end of the distribution; you live in the middle. One
+  image, and the entire product thesis is explained without a paragraph of text.
+  This is the single highest-value thing on the roadmap and it needs no new
+  backend maths.
+- **The gap as a stat.** `typical − potential` is your **range**, and it is half
+  of what separates two golfers with the same handicap: one shoots 82–88, one
+  shoots 76–96, and GHIN calls them the same player. Naming the range is the
+  first thing this app can say that a handicap structurally cannot.
+- **Round percentile.** *"Your 85 was your 6th best of 31 — you shoot that or
+  better in about one round in five."* More meaningful than a stroke gap, and
+  nearly free once the differentials are sorted.
+- **Blow-up rate.** The share of rounds that finish some distance above typical —
+  *"one round in five is 6+ over"*. This is where the strokes actually go for a
+  mid-handicapper, and it is exactly what the WHS caps away with net double
+  bogey. Our gross-score bias becomes a *feature* the moment it is named
+  honestly: we can see the blow-ups because we did not adjust them out. See the
+  bias table in `METHOD.md` — the same decision that costs us agreement with GHIN
+  is what makes this stat possible.
+- **Cross-course translation.** *"Your 85 at Compass Point is an 81 at Flat
+  Meadows."* A party trick, but the kind people screenshot.
+
+### What only dates can say
+
+`played_on` is stored, so every time-series question is already paid for.
+
+- **Am I actually improving** — with error bars. *"Down 1.8 strokes a year,
+  significant"* versus *"your last six rounds are within noise."*
+- **Rust.** Score against days since the previous round. *"You play 2.3 strokes
+  worse when it has been more than three weeks"* is actionable in a way no round
+  stat is, and it costs one subtraction per round.
+- **Do you fade?** If nine-hole differentials run systematically better than
+  eighteen-hole ones, that is stamina or concentration, visible with zero extra
+  data entry. Only available because nines are first-class here.
+
+### What only a rating can say
+
+- **Tee fit.** Slope already adjusts for difficulty, so a golfer who is
+  systematically worse from the tips *relative to the rating* is losing strokes
+  to the tee choice itself. Most amateurs have never checked, and it is one of
+  the few findings in golf that changes behaviour immediately: play up.
+- **Course fit, shrunk** — with *"need 4 more rounds here"* when the evidence is
+  not there yet. Tier 4.
+
+### The one that is actually the moat
+
+**Telling you when it does not know.**
+
+Every golf app implies confidence it has not earned, and golfers over-read three
+good rounds constantly. An app that says *"that is noise — keep logging"* is
+doing something none of them do, and it is what makes the numbers that are
+*not* hedged worth believing.
+
+`rounds_until_benchmarks` is already this instinct in code. It should be a stated
+principle rather than an edge case: **every claim carries its own confidence, and
+a claim with no evidence behind it is not shown at all.** The number is always
+shown; the assertion about the number waits. That rule already exists for course
+fit — it generalises to everything.
+
 ## Design decisions already made
 
 | Decision | Choice | Consequence |
 |---|---|---|
-| Headline differentiator | **Current form** | Tier 3 is the destination; earlier tiers exist to feed it |
-| Data entered per round | **Score only** — date, course, tee, total | No hole-by-hole, no fairways/GIR/putts. Low friction is a feature |
+| Headline differentiator | **The stat book** — the golfer's own distribution, with current form read against it | Tier 3 is the destination; earlier tiers exist to feed it. Current form was the headline on its own until it became clear the distribution is what makes it legible |
+| Data entered per round | **Score only** — date, course, tee, total | The 15-second entry is the feature. Never fairways/GIR/putts/shot tracking. Hole scores are the one reopened question — optional and additive, never required; see Tier 6 |
 | Audience | **Me + golf friends** | `user_id` in the schema from day one; auth moves earlier than originally planned |
 | Form factor | **Mobile first, desktop too** | Round entry happens on a phone; see below. Constrains layout and charts from Tier 1 on |
 | Naming | **"Potential", never "expected"** | Potential is the 20th percentile of your differentials — a good round, not a typical one. `potential_score` / `to_potential` throughout, with `typical_score` / `to_typical` beside them for the median |
@@ -433,6 +533,12 @@ All of these are pure functions living beside `handicap.py` in `backend/golf/`, 
 pytest tests written against known-correct values first. Same treatment as the
 existing math: framework-free, no I/O, provable.
 
+This tier is the vocabulary; **Tier 3 is the screen that says it out loud.** Some
+entries below appear again there as things the home screen shows — that is not
+duplication, it is the same function read from the maths side here and the
+product side there. Typical and potential are built; the rest of this list is
+not.
+
 - **Typical and potential.** ✅ Built — `golf/scoring.py`. The two quantiles, the
   20-round window, the inverse that turns a differential back into a score on a
   tee, and `trailing`, which grades each round on the rounds played before it.
@@ -496,9 +602,15 @@ existing math: framework-free, no I/O, provable.
     come from the *same rounds* and are directly comparable. An all-time typical
     against a 20-round potential compares two different populations and the gap
     between them means nothing.
-  - **Eight rounds minimum.** The median varies by about ±1.4 strokes at eight
-    rounds and ±1.0 at twenty. Below eight, show the countdown rather than a
-    number.
+  - **Three rounds minimum.** Originally eight, chosen from "±1.4 strokes feels
+    tolerable" — which is a preference wearing a threshold's clothes. Measured
+    across sample sizes there is no cliff anywhere near eight: accuracy improves
+    smoothly, and the whole cost of waiting falls on someone new, who would
+    otherwise watch a dead countdown for most of a season. One round genuinely
+    *is* different in kind — the median and the 20th percentile are the same
+    number, so the card would show one figure twice — which is why this is not
+    1. They separate at two and never collide again from four. The table is in
+    `golf/scoring.py`.
 
   Expect the gap to land near **0.85σ** — roughly 2.2 strokes for a steady
   player, 4.2 for a streaky one, which is itself worth surfacing later as a
@@ -769,26 +881,89 @@ error, opposite value, which is the whole reason the methods diverge.
 (Reconstructed from the published worked example, not from their
 implementation. The mechanism is confirmed; treat the decimals as indicative.)
 
-## Tier 3 — Current form (the headline)
+## Tier 3 — The stat book (the headline)
 
-Model the differential series instead of ranking it.
+This tier used to be current form alone. It is now the screen current form lives
+on, and the re-ordering is deliberate: **the picture comes before the estimate.**
 
-- **Estimate a running centre and spread** over your differentials with an
-  exponentially weighted estimator, or a small state-space / Kalman formulation.
-  Recent rounds dominate, so a hot streak shows up immediately instead of waiting for
-  20 rounds to turn over.
-- **Show it against the flat figure**, in strokes on the tee in front of you, so
-  the two sit next to each other: *"You usually shoot 88 here. Right now you're
-  playing like an 85."* Both sides are the same kind of number — a quantile of
-  the same differentials, one weighted and one not — which is what makes the
-  comparison legible rather than a comparison of two different measures.
-- **Consistency (σ) as a first-class stat**, trended over time. See the two-12-
-  handicaps point above — this is a real, legible difference between players that
-  every other golf app throws away.
-- **Trend with honest error bars.** *"Improving 1.8 strokes/year, significant"* versus
-  *"flat — your last 6 rounds are within noise."* Golfers over-read three good rounds
-  constantly. Refusing to claim a trend that isn't there is a feature, and it is the
-  thing that makes the rest of the numbers trustworthy.
+Current form is a good number badly served by having nowhere to sit. *"You
+usually shoot 88, right now you're playing like an 85"* means very little to
+someone who has not yet seen what "usually" looks like. The distribution is what
+makes every other number on this list legible, it needs no maths that does not
+already exist, and it works on the rounds already logged. So it goes first.
+
+The tier as a whole is the answer to *"what kind of golfer am I?"* — a stat book,
+in the sense a season of baseball has a stat book. Everything in it is a
+statement about the golfer over time rather than about one round, which is the
+axis argued for at the top of this document.
+
+### The home screen, in order
+
+The app currently opens on a form. That is backwards: the first screen should be
+the thing the app is *for*, and logging a round is a task you arrive at, not the
+front door. Four things, in this order:
+
+1. **Typical and potential**, in strokes, on the tee last played. The two
+   numbers, big, exactly as the round card renders them.
+2. **The distribution strip** underneath — the last 20 differentials as marks
+   along an axis, with typical and potential picked out. This is the one that
+   makes people say *"oh."*
+3. **Form**: the recency-weighted centre against the flat one. *"Usually 88,
+   playing like an 85."*
+4. **What it does not know yet**: the round count, and what unlocks at what
+   number. The honesty rule from the top of this document, made visible.
+
+Nothing above needs a new endpoint except form, and form is a small pure function
+over the same list of differentials.
+
+### The stats themselves
+
+All of these are pure functions in `backend/golf/`, tested first, same as
+everything else. Ordered by value per unit of work.
+
+- **The distribution.** Not a stat so much as the substrate: the differentials,
+  sorted, with the two quantiles marked. Everything else is an annotation on it.
+- **Range** — `typical − potential`, the consistency reading. Expect it near
+  **0.85σ**: roughly 2.2 strokes for a steady player and 4.2 for a streaky one.
+  Two players with the same potential and different ranges are different golfers
+  and should read as different golfers on screen.
+- **Current form.** Estimate a running centre and spread over the differentials
+  with an exponentially weighted estimator, or a small state-space / Kalman
+  formulation — recent rounds dominate, so a hot streak shows up immediately
+  instead of waiting for 20 rounds to turn over. Show it against the flat figure,
+  in strokes on the tee in front of you: both sides are then the same kind of
+  number, a quantile of the same differentials, one weighted and one not, which
+  is what makes the comparison legible rather than a comparison of two different
+  measures.
+
+  **Do not implement this twice.** Typical and current form are the same
+  machinery at different settings. One function with a weighting parameter, not
+  two that drift apart.
+- **Trend, with honest error bars.** *"Improving 1.8 strokes/year, significant"*
+  versus *"flat — your last 6 rounds are within noise."* Refusing to claim a
+  trend that is not there is the feature; see "the one that is actually the
+  moat" above.
+- **Blow-up rate.** The share of rounds finishing some fixed distance above
+  typical. Cheap, and it is the stat that explains where a mid-handicapper's
+  strokes actually go. It exists here *because* we store gross scores — see the
+  bias table in `METHOD.md`, which is the same decision read from the other side.
+- **Rust.** Differential against days since the previous round. One subtraction
+  per round, and a genuinely personal finding. Beware reading a trend out of it
+  too early: it wants the same error bars as everything else.
+- **Nine versus eighteen.** Whether nine-hole differentials run better than
+  eighteen-hole ones for this golfer — a stamina reading, free because nines are
+  first-class here and carry their own ratings.
+- **Records worth keeping.** Best differential ever, best round at each course,
+  longest run under typical. Trivial to compute, and a stat book without records
+  in it is a spreadsheet.
+
+### What this tier does *not* do
+
+Round-level breakdowns. There are no putts, no fairways, no greens in regulation,
+and adding them is not a matter of finding time — it is the decision at the top
+of this document. If a stat needs to know what happened inside the round rather
+than what the round was worth, it belongs in Tier 6 and is subject to Tier 6's
+conditions.
 
 ## Tier 4 — Course fit, done honestly
 
@@ -808,6 +983,12 @@ rather than merely fun.
   See "Per-course typical and potential" above.
 - Apply the same treatment **per tee**, and optionally grouped by course length or
   rating band — which starts to answer *why* a course fits, not just *that* it does.
+- **Tee fit deserves top billing, not a footnote.** Slope already adjusts for
+  difficulty, so a golfer who scores worse from the back tees *relative to the
+  rating* is losing strokes to the tee choice itself, not to the course. Almost
+  no amateur has ever checked this, and unlike most findings in golf it is
+  immediately actionable: play up. It needs the same shrinkage and the same
+  interval as course fit — the claim waits for evidence, the number does not.
 
 ## The auth plan
 
@@ -1624,7 +1805,7 @@ This is what architecture looks like in practice: not orchestration, but "who
 owns this row and what happens when two people want it." Easy to settle now,
 painful once there is data.
 
-It is also the strongest argument for the automatic course lookup in Tier 6.
+It is also the strongest argument for the automatic course lookup in Tier 7.
 Authoritative ratings from the USGA sidestep the governance problem rather than
 solving it — nobody owns a fact.
 
@@ -1709,7 +1890,125 @@ window, and **restore one once** into a throwaway database. An untested restore
 on a managed provider is exactly as worthless as an untested `pg_dump` — the
 difference is it feels safe while being equally exposed.
 
-## Tier 6 — Stretch
+## Tier 6 — Hole-by-hole, if it earns it
+
+This was in "explicitly out of scope" and has been moved, deliberately, because
+the reasoning that put it there was about *fairways, putts and shot tracking* and
+got applied to hole scores by association. They are not the same ask. Eighteen
+numbers copied off a card you are already keeping is a different thing from
+recording where every shot finished.
+
+**It is still gated, and the gate is not sentimental.** The conditions below are
+what separate this from the feature that kills the app.
+
+### What hole scores would unlock
+
+The point is not "more stats." Four specific things become possible for a single
+golfer that are impossible from a total, and two more once there are many
+golfers. Several of them are things nobody ships.
+
+1. **Real Adjusted Gross Score.** The WHS caps each hole at net double bogey. We
+   cannot compute that from a total, so we take the card — and carry a measured
+   bias for it: typical reads 1.8–2.6 strokes high for a player who blows up,
+   while potential barely moves. See `METHOD.md`. With hole scores that bias
+   simply goes away — *with one honest caveat*, below.
+
+   **The caveat: the cap is NET double bogey.** Par + 2 + the handicap strokes
+   you receive on that hole, which needs a Course Handicap, which needs an index
+   — and this app computes none. Hole scores remove the *arithmetic* obstacle,
+   not the circularity, so this is a real decision rather than a free win. Three
+   ways out, none obviously right:
+   - **Take an official index the golfer types in.** Honest, externally sourced,
+     and already the stated basis for `course_handicap` in `handicap.py`. Costs a
+     field and only works for golfers who have one.
+   - **Use potential as the strokes-received basis.** Defensible — potential is
+     roughly what an index measures — but it is index-shaped, and the project's
+     rule is that nothing may be *labelled* an index. Using one internally
+     without showing it is a different thing from publishing one, and that line
+     needs drawing deliberately rather than by accident.
+   - **Cap at gross double bogey instead**, with no handicap strokes at all.
+     Not the WHS's number and must never be called AGS, but it is
+     non-circular, needs nothing external, and removes most of the blow-up tail
+     the bias table is about.
+
+   Whichever is chosen, `METHOD.md` gets the reasoning and the measured
+   difference, and both figures should be shown: what you shot, and what the
+   capped version counts.
+2. **Stroke allocation between players.** Today the app refuses to allocate
+   strokes in a match, and the refusal is correct: the gross-score bias cancels
+   in every self-referential comparison and does *not* cancel between people, so
+   two golfers GHIN rates 0.24 apart can come out 2.4 apart here. A capped score
+   removes exactly that objection, since the bias it removes is the one that does
+   not cancel between people. **The Tier 5 match calculator is blocked on this**,
+   and it is the strongest single argument for the tier — subject to the caveat
+   above, since a match calculator built on a stand-in index is a match
+   calculator built on a number the app refuses to publish.
+3. **Typical and potential per hole.** The app's whole idea, applied one level
+   down: *"your typical on 7 is 5.2, your potential is 4."* Nobody has seen that
+   either, and it is the same two quantiles over a different population — the
+   existing machinery, pointed somewhere new.
+4. **The assembled round.** Sum your per-hole potentials and you get a number far
+   below your round potential, because you never get all eighteen right on the
+   same day. **The gap between those two is itself the stat** — a measure of how
+   much of your good golf is available at once. It is honest, it is novel, and it
+   is only computable with hole scores. If this tier has a headline, it is this.
+
+Two more that need scale rather than one golfer:
+
+5. **Measured hole difficulty.** The stroke index printed on a scorecard is often
+   decades old and was set by a committee. With enough rounds across enough
+   players you can compute the real one, per tee. GHIN and 18Birdies both hold
+   the data to do this and neither does it.
+6. **Where the strokes go.** Distribution of hole scores against par, by par
+   type. *"You are level with your potential on par 3s and 1.4 strokes worse on
+   par 5s"* is a practice plan, from data you already wrote on the card.
+
+### The conditions
+
+- **Optional per round, forever.** The fifteen-second path stays exactly as it
+  is and stays the default. A round with a total and no holes is a first-class
+  round, not a degraded one, and must never be shown as incomplete.
+- **Nothing regresses.** Every stat in Tiers 2–4 keeps working on the total, for
+  every round, whether or not holes were entered. Hole-level stats are *additional
+  answers*, never a replacement — the moment a headline number needs hole data,
+  a golfer who logs totals has lost the app.
+- **Every stat states what it could use.** Two grades of data means "your typical
+  on par 5s" is drawn from a different, smaller set of rounds than "your typical".
+  Saying which, and how many, is the same honesty rule as everywhere else. This
+  is the real complexity tax of the tier and it should be budgeted for, not
+  discovered.
+- **It goes after Tier 3, not before.** Hole data has a cold start: the score-only
+  history is ~30 rounds deep on day one and the hole history is zero. Building
+  the distributional features first means they work immediately on rounds that
+  already exist, and hole-level stats accumulate quietly underneath until they
+  have something to say.
+- **Entry has to be designed, not bolted on.** Eighteen number fields is the
+  ten-minute entry this document warns about. It wants a keypad, one tap per
+  hole, defaulting to par, finished in the time it takes to walk off 18 — and
+  the total it produces must reconcile with the total the golfer would have
+  typed. If that entry screen cannot be made genuinely fast, the tier does not
+  ship; that is the test.
+
+### Schema, and why it is additive
+
+Two new tables, nothing existing changes:
+
+```
+holes        id, tee_id, number (1-18), par, yardage, stroke_index
+hole_scores  id, round_id, hole_number, strokes
+```
+
+`holes` belongs to a tee, not a course, because yardage and stroke index are
+per-tee, exactly as rating and slope already are. `hole_scores` hangs off a
+round; its absence is what "score only" means, so no flag is needed and no
+existing column moves. A round's total stays the source of truth in
+`rounds.gross_score` — hole scores are additional detail about it, and where the
+two disagree the entry screen resolves it, not the reader.
+
+That shape is worth writing down now even though the tier is far off, because it
+is the check that nothing being built today makes it harder.
+
+## Tier 7 — Stretch
 
 - Automatic course and tee slope/rating lookup, so adding a course isn't manual data
   entry (originally build order step 7).
@@ -1720,9 +2019,18 @@ difference is it feels safe while being equally exposed.
 
 ## Explicitly out of scope
 
-Hole-by-hole entry, strokes gained, shot tracking, GPS, fairways/GIR/putts.
+Strokes gained, shot tracking, GPS, fairways, greens in regulation, putts.
 
-This follows directly from the score-only decision. It is where most golf apps die:
-the analysis gets richer, the data entry gets tedious, and the user stops logging
-rounds — at which point every feature above stops working. A round must stay a
-15-second entry.
+Not "later" — these are the things that make an entry screen take ten minutes,
+and it is where most golf apps die: the analysis gets richer, the data entry gets
+tedious, the user stops logging rounds, and every feature above stops working
+because all of them need volume. A round must stay a 15-second entry.
+
+**Hole-by-hole scores used to be on this list and are not any more** — see Tier
+6. The distinction is the amount of work asked of the golfer, not the richness of
+the analysis: eighteen numbers copied off a card that already exists is not the
+same ask as recording where every shot finished. The tier is gated on keeping the
+15-second path untouched, and if that cannot be held, it stays unbuilt.
+
+The line to hold, in one sentence: **anything that requires a golfer to record
+something they were not already writing down is out.**
