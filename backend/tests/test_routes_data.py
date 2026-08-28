@@ -260,6 +260,105 @@ def test_an_added_tee_cannot_store_half_a_nine(client):
 
 
 # ---------------------------------------------------------------------------
+# Correcting a tee
+# ---------------------------------------------------------------------------
+
+
+def test_nine_hole_ratings_can_be_added_to_an_existing_tee(client):
+    """The operation that was unreachable, and cost a real backfill a duplicate
+    course. A tee entered with only 18-hole figures must be able to gain its
+    nine-hole ones without inventing a second tee."""
+    course = add_course(client, tees=FLAT_TEE)          # 18-hole figures only
+    tee = course["tees"][0]
+    assert tee["front_course_rating"] is None
+
+    response = client.patch(
+        f"/courses/{course['id']}/tees/{tee['id']}",
+        json={"front_course_rating": 36.0, "front_slope_rating": 113},
+    )
+
+    assert response.status_code == 200
+    updated = response.json()["tees"][0]
+    assert updated["front_course_rating"] == pytest.approx(36.0)
+    assert updated["front_slope_rating"] == 113
+    # Untouched fields survive: PATCH sends only what changes.
+    assert updated["course_rating"] == pytest.approx(72.0)
+    assert updated["back_course_rating"] is None
+
+
+def test_a_nine_becomes_gradeable_once_its_ratings_arrive(client):
+    """The whole point. A nine logged before the ratings existed was carried
+    ungraded; adding them grades it, because nothing derived is stored."""
+    course = add_course(client, tees=FLAT_TEE)
+    tee = course["tees"][0]
+    log_a_history(client, tee["id"])
+    nine = log(client, tee["id"], "2025-02-01", 40, nine="front")
+    assert nine["score_differential"] is None          # not rated yet
+
+    client.patch(
+        f"/courses/{course['id']}/tees/{tee['id']}",
+        json={"front_course_rating": 36.0, "front_slope_rating": 113},
+    )
+
+    regraded = next(r for r in client.get("/rounds").json() if r["id"] == nine["id"])
+    assert regraded["score_differential"] == pytest.approx(4.0)   # 40 - 36.0
+    assert regraded["typical_score"] is not None
+
+
+def test_correcting_a_slope_regrades_history(client):
+    """A slope typed wrong distorts every round from that tee. Fixing it has to
+    fix them too — which it does, because differentials are derived on read."""
+    course = add_course(client, tees=FLAT_TEE)
+    tee = course["tees"][0]
+    before = log(client, tee["id"], "2025-06-14", 88)["score_differential"]
+
+    client.patch(f"/courses/{course['id']}/tees/{tee['id']}",
+                 json={"slope_rating": 130})
+
+    after = client.get("/rounds").json()[0]["score_differential"]
+    assert after != before
+    assert after == pytest.approx(13.9)    # (88 - 72.0) x 113/130
+
+
+def test_a_patch_cannot_leave_half_a_nine(client):
+    """Checked against the MERGED tee, not the payload."""
+    course = add_course(client, tees=FLAT_TEE)
+    tee = course["tees"][0]
+
+    response = client.patch(f"/courses/{course['id']}/tees/{tee['id']}",
+                            json={"front_course_rating": 36.0})
+
+    assert response.status_code == 422
+
+
+def test_a_patch_may_complete_a_half_filled_pair(client):
+    """Sending only the missing half is a completion, not a violation."""
+    course = add_course(client, tees=FLAT_TEE)
+    tee = course["tees"][0]
+    client.patch(f"/courses/{course['id']}/tees/{tee['id']}",
+                 json={"front_course_rating": 36.0, "front_slope_rating": 113})
+
+    response = client.patch(f"/courses/{course['id']}/tees/{tee['id']}",
+                            json={"front_slope_rating": 118})
+
+    assert response.status_code == 200
+    assert response.json()["tees"][0]["front_slope_rating"] == 118
+
+
+def test_patching_a_tee_at_the_wrong_course_is_a_404(client):
+    """The tee id alone is not enough — it has to belong to that course."""
+    mine = add_course(client, tees=FLAT_TEE)
+    other = add_course(client, name="Riverside", tees=FLAT_TEE)
+
+    response = client.patch(
+        f"/courses/{other['id']}/tees/{mine['tees'][0]['id']}",
+        json={"slope_rating": 130},
+    )
+
+    assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # Rounds
 # ---------------------------------------------------------------------------
 

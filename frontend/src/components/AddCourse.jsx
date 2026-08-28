@@ -1,25 +1,29 @@
 /**
- * Adding a course, or adding a tee to a course already here.
+ * Adding a course, adding a tee to one already here, or filling in the ratings
+ * a tee was entered without.
  *
- * Two modes on one form, because they collect almost the same fields. The
- * second one is not a nicety: a course is unique on name and location, so
- * before this existed the second set of tees you ever played at a course was
- * unreachable — you would meet that partway through a backfill, at the first
- * round from different tees, with no way past it.
+ * Three modes on one form, because they collect overlapping fields. None of the
+ * later two is a nicety; each closes a wall a real backfill actually hit. A
+ * course is unique on name and location, so before "Add a tee" existed the
+ * second set of tees you played at a course was unreachable. And before "Nine
+ * ratings" existed, a tee entered with only its 18-hole figures could never
+ * gain its nine-hole ones — the form insisted on the 18-hole fields again, so
+ * the way through was to enter the course a second time, which is exactly what
+ * happened.
  *
  * Slope and rating are typed here ONCE per tee and never again. That is the
  * whole point of the courses table: every round afterwards is a picker choice.
  *
- * The nine-hole ratings are optional and collapsed behind a toggle, because
- * most people will not have them to hand the first time. They matter when they
- * matter: without them a nine played from this tee is logged but cannot be
- * graded, and approximating them from the 18-hole figures is worse than leaving
- * the round out. The USGA prints all four at ncrdb.usga.org as "Front (9)" and
- * "Back (9)", each written "rating / slope".
+ * The nine-hole ratings are optional in the first two modes and collapsed
+ * behind a toggle, because most people will not have them to hand the first
+ * time. They matter when they matter: without them a nine played from this tee
+ * is logged but cannot be graded, and approximating them from the 18-hole
+ * figures is worse than leaving the round out. The USGA prints all four at
+ * ncrdb.usga.org as "Front (9)" and "Back (9)", each written "rating / slope".
  */
 import { useState } from "react";
 
-import { addTees, createCourse } from "../api.js";
+import { addTees, createCourse, updateTee } from "../api.js";
 
 const EMPTY = {
   name: "", city: "", state: "", teeName: "", par: "72",
@@ -37,11 +41,22 @@ export default function AddCourse({ courses = [], onSaved }) {
   const [error, setError] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showNines, setShowNines] = useState(false);
-  // "new" adds a course and its first tee; "tee" adds a tee to one already here.
+  // "new"    a course and its first tee
+  // "tee"    another tee at a course already here
+  // "nines"  the nine-hole ratings for a tee that was entered without them —
+  //          the operation whose absence made a real backfill duplicate a course
   const [mode, setMode] = useState("new");
   const [courseId, setCourseId] = useState("");
+  const [teeId, setTeeId] = useState("");
 
   const addingTee = mode === "tee";
+  const fixingNines = mode === "nines";
+  const chosenCourse = courses.find((c) => String(c.id) === String(courseId));
+  // Only tees that still lack them: this mode exists to fill a gap, and
+  // offering tees that are already complete just invites confusion.
+  const teesMissingNines = (chosenCourse?.tees ?? []).filter(
+    (t) => t.front_course_rating === null || t.back_course_rating === null,
+  );
 
   function change(event) {
     const { name, value } = event.target;
@@ -65,7 +80,23 @@ export default function AddCourse({ courses = [], onSaved }) {
     };
 
     try {
-      const course = addingTee
+      const nines = {
+        front_course_rating: optional(form.frontRating),
+        front_slope_rating: optional(form.frontSlope),
+        back_course_rating: optional(form.backRating),
+        back_slope_rating: optional(form.backSlope),
+      };
+      // Send only what was filled in: PATCH treats an absent field as "keep".
+      const given = Object.fromEntries(
+        Object.entries(nines).filter(([, v]) => v !== null),
+      );
+      if (fixingNines && Object.keys(given).length === 0) {
+        throw new Error("Fill in at least one nine's rating and slope.");
+      }
+
+      const course = fixingNines
+        ? await updateTee(Number(courseId), Number(teeId), given)
+        : addingTee
         ? await addTees(Number(courseId), [tee])
         : await createCourse({
             name: form.name,
@@ -77,11 +108,15 @@ export default function AddCourse({ courses = [], onSaved }) {
       // Hand back the tee that was just created, so entry continues on it.
       // Matched by name rather than by position: adding a tee returns the whole
       // course, and its tees come back in whatever order the database gives.
-      const saved = course.tees.find((t) => t.name === form.teeName)
-        ?? course.tees[0];
+      const saved = fixingNines
+        ? course.tees.find((t) => String(t.id) === String(teeId))
+        : course.tees.find((t) => t.name === form.teeName) ?? course.tees[0];
 
       setForm(EMPTY);
       setShowNines(false);
+      // The tee just fixed drops out of `teesMissingNines`, so a stale id would
+      // leave the picker showing a value it no longer offers.
+      setTeeId("");
       onSaved(course, saved?.id);
     } catch (saveError) {
       setError(saveError.message);
@@ -98,7 +133,8 @@ export default function AddCourse({ courses = [], onSaved }) {
           <div className="choice__options">
             {[
               { value: "new", label: "New course" },
-              { value: "tee", label: "Tee to a course" },
+              { value: "tee", label: "Add a tee" },
+              { value: "nines", label: "Nine ratings" },
             ].map((option) => (
               <label key={option.value} className="choice__option">
                 <input
@@ -108,6 +144,7 @@ export default function AddCourse({ courses = [], onSaved }) {
                   checked={mode === option.value}
                   onChange={(event) => {
                     setMode(event.target.value);
+                    setTeeId("");
                     setError(null);
                   }}
                 />
@@ -118,13 +155,16 @@ export default function AddCourse({ courses = [], onSaved }) {
         </fieldset>
       )}
 
-      {addingTee ? (
+      {addingTee || fixingNines ? (
         <label className="field">
           <span className="field__label">Course</span>
           <select
             required
             value={courseId}
-            onChange={(event) => setCourseId(event.target.value)}
+            onChange={(event) => {
+              setCourseId(event.target.value);
+              setTeeId("");
+            }}
           >
             <option value="">Pick a course&hellip;</option>
             {courses.map((course) => (
@@ -157,31 +197,59 @@ export default function AddCourse({ courses = [], onSaved }) {
         </>
       )}
 
-      <label className="field">
-        <span className="field__label">Tee</span>
-        <input name="teeName" required maxLength={40} placeholder="Blue"
-               value={form.teeName} onChange={change} />
-      </label>
-
-      <div className="field-row">
-        <label className="field field--narrow">
-          <span className="field__label">Par</span>
-          <input name="par" type="number" inputMode="numeric" required min="1" max="100"
-                 value={form.par} onChange={change} />
-        </label>
+      {fixingNines ? (
         <label className="field">
-          <span className="field__label">Rating</span>
-          <input name="courseRating" type="number" inputMode="decimal" step="0.1" required
-                 min="0.1" placeholder="71.5" value={form.courseRating} onChange={change} />
+          <span className="field__label">Tee</span>
+          <select
+            required
+            value={teeId}
+            onChange={(event) => setTeeId(event.target.value)}
+            disabled={courseId === ""}
+          >
+            <option value="">
+              {courseId === "" ? "Pick a course first…" : "Pick a tee…"}
+            </option>
+            {teesMissingNines.map((tee) => (
+              <option key={tee.id} value={tee.id}>
+                {tee.name}
+              </option>
+            ))}
+          </select>
+          {courseId !== "" && teesMissingNines.length === 0 && (
+            <span className="field__hint">
+              Every tee at this course already has its nine-hole ratings.
+            </span>
+          )}
         </label>
-        <label className="field field--narrow">
-          <span className="field__label">Slope</span>
-          <input name="slopeRating" type="number" inputMode="numeric" required min="55" max="155"
-                 placeholder="130" value={form.slopeRating} onChange={change} />
-        </label>
-      </div>
+      ) : (
+        <>
+          <label className="field">
+            <span className="field__label">Tee</span>
+            <input name="teeName" required maxLength={40} placeholder="Blue"
+                   value={form.teeName} onChange={change} />
+          </label>
 
-      {showNines ? (
+          <div className="field-row">
+            <label className="field field--narrow">
+              <span className="field__label">Par</span>
+              <input name="par" type="number" inputMode="numeric" required min="1" max="100"
+                     value={form.par} onChange={change} />
+            </label>
+            <label className="field">
+              <span className="field__label">Rating</span>
+              <input name="courseRating" type="number" inputMode="decimal" step="0.1" required
+                     min="0.1" placeholder="71.5" value={form.courseRating} onChange={change} />
+            </label>
+            <label className="field field--narrow">
+              <span className="field__label">Slope</span>
+              <input name="slopeRating" type="number" inputMode="numeric" required min="55" max="155"
+                     placeholder="130" value={form.slopeRating} onChange={change} />
+            </label>
+          </div>
+        </>
+      )}
+
+      {showNines || fixingNines ? (
         <>
           <div className="rule">
             <span className="rule__label">Nine-hole ratings</span>
@@ -189,8 +257,10 @@ export default function AddCourse({ courses = [], onSaved }) {
           <p className="field__hint">
             From the scorecard or ncrdb.usga.org, written &ldquo;rating /
             slope&rdquo;. Each nine is rated separately — the slopes often
-            differ by several points, which is why both are asked for. Leave
-            blank and nines from this tee are logged but not graded.
+            differ by several points, which is why both are asked for.
+            {fixingNines
+              ? " Fill in one nine or both; whichever you leave blank is left as it was."
+              : " Leave blank and nines from this tee are logged but not graded."}
           </p>
 
           <div className="field-row">
@@ -230,9 +300,19 @@ export default function AddCourse({ courses = [], onSaved }) {
       <button
         className="button"
         type="submit"
-        disabled={isSaving || (addingTee && courseId === "")}
+        disabled={
+          isSaving ||
+          (addingTee && courseId === "") ||
+          (fixingNines && teeId === "")
+        }
       >
-        {isSaving ? "Adding…" : addingTee ? "Add tee" : "Add course"}
+        {isSaving
+          ? "Saving…"
+          : fixingNines
+          ? "Save ratings"
+          : addingTee
+          ? "Add tee"
+          : "Add course"}
       </button>
     </form>
   );

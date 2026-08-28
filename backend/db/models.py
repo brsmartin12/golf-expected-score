@@ -90,7 +90,20 @@ class Course(Base):
     __table_args__ = (
         # Course names repeat across the country, so the name alone is not
         # unique. Name plus location is close enough to catch a double entry.
-        UniqueConstraint("name", "city", "state", name="uq_course_name_location"),
+        #
+        # postgresql_nulls_not_distinct is doing real work here, and its absence
+        # was a live bug. Postgres treats NULLs as distinct in a unique
+        # constraint by default, so two courses with the same name and no city
+        # or state did NOT collide -- and city and state are optional, so that
+        # is the common case. Entering the same course twice silently produced
+        # two rows and two entries in the picker.
+        UniqueConstraint(
+            "name",
+            "city",
+            "state",
+            name="uq_course_name_location",
+            postgresql_nulls_not_distinct=True,
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

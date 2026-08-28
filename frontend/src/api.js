@@ -41,33 +41,29 @@ function describeError(status, problem) {
   return `Request failed (HTTP ${status}).`;
 }
 
-async function getJson(path) {
-  let response;
-
-  try {
-    response = await fetch(`${API_URL}${path}`);
-  } catch {
-    throw new Error(
-      `Could not reach the API at ${API_URL}. Is the backend running?`,
-    );
-  }
-
-  if (!response.ok) {
-    const problem = await response.json().catch(() => null);
-    throw new Error(describeError(response.status, problem));
-  }
-
-  return response.json();
-}
-
-async function postJson(path, body) {
+/**
+ * One request, and the error handling every call needs.
+ *
+ * All four verbs go through here. They differ only in the method and whether
+ * there is a body to send or a body to read back, and writing that out four
+ * times meant four places to keep the error handling in step -- so it is one
+ * place, with thin wrappers below naming the verbs.
+ *
+ * `parse` is false for 204 No Content, where there is deliberately nothing to
+ * read.
+ */
+async function request(path, { method = "GET", body, parse = true } = {}) {
   let response;
 
   try {
     response = await fetch(`${API_URL}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      method,
+      ...(body === undefined
+        ? {}
+        : {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          }),
     });
   } catch {
     // fetch only rejects when the request never completed -- server down, DNS
@@ -84,25 +80,13 @@ async function postJson(path, body) {
     throw new Error(describeError(response.status, problem));
   }
 
-  return response.json();
+  return parse ? response.json() : undefined;
 }
 
-async function deleteJson(path) {
-  let response;
-  try {
-    response = await fetch(`${API_URL}${path}`, { method: "DELETE" });
-  } catch {
-    throw new Error(
-      `Could not reach the API at ${API_URL}. Is the backend running?`,
-    );
-  }
-
-  if (!response.ok) {
-    const problem = await response.json().catch(() => null);
-    throw new Error(describeError(response.status, problem));
-  }
-  // 204 No Content: there is deliberately no body to parse.
-}
+const getJson = (path) => request(path);
+const postJson = (path, body) => request(path, { method: "POST", body });
+const patchJson = (path, body) => request(path, { method: "PATCH", body });
+const deleteJson = (path) => request(path, { method: "DELETE", parse: false });
 
 /** Every round this golfer has logged, most recently played first. */
 export function fetchRounds() {
@@ -185,4 +169,15 @@ export function createRound({ teeId, playedOn, grossScore, nine }) {
  */
 export function deleteRound(id) {
   return deleteJson(`/rounds/${id}`);
+}
+
+/**
+ * Correct a tee's ratings — usually adding the nine-hole ones after the fact.
+ *
+ * Only the fields given are changed. Note this regrades every round played from
+ * the tee, because differentials are derived on read, so a caller showing
+ * rounds should refetch.
+ */
+export function updateTee(courseId, teeId, ratings) {
+  return patchJson(`/courses/${courseId}/tees/${teeId}`, ratings);
 }

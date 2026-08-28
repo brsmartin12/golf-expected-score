@@ -161,6 +161,75 @@ types and indexes, and blind to intent — a renamed column is emitted as a drop
 plus an add, which would throw the data away. `tests/test_migrations.py` fails
 if the models and the migrations ever disagree.
 
+### Merging a duplicated course
+
+Courses are unique on name, city and state. Until recently that constraint let
+duplicates through anyway: Postgres treats two NULLs as *different* values in a
+unique constraint, and city and state are both optional, so entering the same
+course twice with no location produced two rows and two entries in the picker.
+The migration that fixes it refuses to run while duplicates exist, because
+which row to keep is a judgement it should not make for you.
+
+There is no screen for this — it is a one-off repair, and the app is otherwise
+the only way data goes in. Take a snapshot first:
+
+```bash
+make backup
+make psql
+```
+
+Find the duplicates and everything hanging off them. Rounds point at tees, tees
+point at courses, so all three tables are involved:
+
+```sql
+SELECT c.id AS course_id, c.name, c.city, c.state,
+       t.id AS tee_id, t.name AS tee, t.course_rating, t.slope_rating,
+       t.front_course_rating, t.back_course_rating,
+       count(r.id) AS rounds
+FROM courses c
+LEFT JOIN tees t ON t.course_id = c.id
+LEFT JOIN rounds r ON r.tee_id = t.id
+WHERE c.name IN (SELECT name FROM courses GROUP BY name, city, state
+                 HAVING count(*) > 1)
+GROUP BY c.id, c.name, c.city, c.state, t.id, t.name
+ORDER BY c.name, c.id, t.name;
+```
+
+Then decide, from that output, which course id is the **keeper** — normally the
+one whose tees are most complete, since ratings are the part that is tedious to
+re-enter. Two cases follow, and a real duplicate usually needs both.
+
+**A tee that exists only on the leftover course** moves across as it is:
+
+```sql
+UPDATE tees SET course_id = <keeper_course_id> WHERE id = <tee_id>;
+```
+
+**The same tee entered on both** — the usual case, where one copy has the
+nine-hole ratings and the other does not — needs its rounds repointing before
+the duplicate goes, or they would be deleted with it:
+
+```sql
+UPDATE rounds SET tee_id = <keeper_tee_id> WHERE tee_id = <duplicate_tee_id>;
+DELETE FROM tees WHERE id = <duplicate_tee_id>;
+```
+
+Check that nothing is left pointing at the leftover course, then remove it:
+
+```sql
+SELECT count(*) FROM tees WHERE course_id = <leftover_course_id>;   -- expect 0
+DELETE FROM courses WHERE id = <leftover_course_id>;
+```
+
+Leave the psql prompt with `\q`, then `make migrate`. The migration's guard is
+the check that the merge was complete: if it still refuses, a duplicate remains.
+
+Nothing above is destructive to scores as long as the rounds are repointed
+first — and that is exactly the step to get wrong, which is what the backup at
+the top is for. Once merged, a tee missing its nine-hole ratings no longer
+needs a second course: **Add a course or tee → Nine ratings** fills them in on
+the tee that is already there.
+
 ## Running the API
 
 ```bash

@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from api.schemas import CourseCreate, CourseRead, TeeCreate
+from api.schemas import CourseCreate, CourseRead, TeeCreate, TeeUpdate
 from db import Course, Tee, get_session
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -116,5 +116,57 @@ def add_tees(
             ),
         ) from exc
 
+    session.refresh(course)
+    return course
+
+
+@router.patch("/{course_id}/tees/{tee_id}", response_model=CourseRead)
+def update_tee(
+    course_id: int,
+    tee_id: int,
+    payload: TeeUpdate,
+    session: Session = Depends(get_session),
+) -> Course:
+    """Correct a tee's ratings — most often, add the nine-hole ones later.
+
+    PATCH rather than PUT: the caller sends only what changes. Adding a front
+    nine to a tee should not require re-sending its 18-hole figures, which is
+    exactly the friction that pushed one real backfill into creating a second
+    course instead.
+
+    Changing a rating changes every past round played from this tee, because
+    differentials are derived on read and never stored. That is the intended
+    behaviour: a slope typed wrong has been quietly distorting history, and
+    fixing it should fix the history too.
+
+    The paired front/back check runs against the MERGED tee, not the payload —
+    sending only a front slope for a tee that already has a front rating is a
+    completion, not a half-filled state.
+    """
+    tee = session.get(Tee, tee_id)
+    if tee is None or tee.course_id != course_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No tee with id {tee_id} at course {course_id}.",
+        )
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(tee, field, value)
+
+    for side in ("front", "back"):
+        rating = getattr(tee, f"{side}_course_rating")
+        slope = getattr(tee, f"{side}_slope_rating")
+        if (rating is None) != (slope is None):
+            session.rollback()
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"{side}_course_rating and {side}_slope_rating must end up "
+                    "either both set or both empty."
+                ),
+            )
+
+    session.commit()
+    course = session.get(Course, course_id)
     session.refresh(course)
     return course

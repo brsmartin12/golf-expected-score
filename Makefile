@@ -20,7 +20,7 @@ PIP := $(VENV)/bin/pip
 BACKUP := backup-$(shell date +%F).sql
 
 .DEFAULT_GOAL := help
-.PHONY: help setup start db migrate api web test backup restore stop reset-db
+.PHONY: help setup start db migrate api web test backup restore psql stop reset-db
 
 help:
 	@echo "Setup"
@@ -36,6 +36,7 @@ help:
 	@echo "  make migrate    apply new migrations"
 	@echo "  make backup     snapshot the database to $(BACKUP)"
 	@echo "  make restore FILE=backup-....sql   restore into an empty database"
+	@echo "  make psql       open a SQL prompt on the database"
 	@echo "  make stop       stop Postgres, keeping the data"
 	@echo "  make reset-db   DELETE all local data and start over"
 
@@ -86,6 +87,13 @@ restore:
 	docker compose down -v
 	docker compose up -d --wait
 	docker compose exec -T db psql -U golf -d golf < $(FILE)
+
+# A SQL prompt on the running database. Needed rarely -- the app is the way to
+# put data in -- but there is no screen for merging two courses that turned out
+# to be the same course, and that is a real repair. See "Merging a duplicated
+# course" in README.md.
+psql:
+	docker compose exec db psql -U golf -d golf
 
 stop:
 	docker compose down
