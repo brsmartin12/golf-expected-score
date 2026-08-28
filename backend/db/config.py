@@ -15,7 +15,7 @@ load_dotenv()
 
 # Matches the docker-compose.yml at the repo root, so a fresh clone needs no
 # configuration at all.
-DEFAULT_DATABASE_URL = "postgresql+psycopg://golf@127.0.0.1:5432/golf"
+DEFAULT_DATABASE_URL = "postgresql+psycopg://golf:golf@127.0.0.1:5432/golf"
 
 
 def database_url() -> str:
