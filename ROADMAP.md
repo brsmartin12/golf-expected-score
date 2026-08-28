@@ -1415,6 +1415,108 @@ response to problems this app will not have for years. Some of it is a response
 to *organisational* scale rather than traffic: forty engineers need service
 boundaries so they can deploy independently, one engineer needs a monolith.
 
+### The shape of it
+
+Today, three processes on one machine:
+
+```
+your laptop
+  browser :5173 ──► vite dev server        serves JS, hot-reloads
+       │
+       └─ fetch ──► uvicorn :8000          FastAPI
+                         │
+                         └──► docker: postgres :5432
+```
+
+Deployed, three boxes:
+
+```
+                          anyone's phone
+                                │
+                    https://golf.example.com
+                                ▼
+                    ┌───────────────────────┐
+                    │  static hosting / CDN │   HTML, JS, CSS.
+                    │                       │   None of our code runs here.
+                    └───────────────────────┘   Just files, cached worldwide.
+                                │
+              the JS, now running in the browser, calls:
+                    https://api.example.com
+                                ▼
+                    ┌───────────────────────┐
+                    │  the app container    │   uvicorn. ONE instance.
+                    │  (platform-managed)   │   Platform provides TLS,
+                    └───────────────────────┘   domain, restarts, logs.
+                                │
+                                ▼
+                    ┌───────────────────────┐
+                    │   managed Postgres    │   Backups, patches, failover
+                    │                       │   are someone else's job.
+                    └───────────────────────┘
+```
+
+No load balancer of our own, no service mesh, no queue, no cache. The
+platform's router is the front door.
+
+**The frontend and backend live on different hosts, and the browser talks to
+both separately.** The static host never calls the API — it ships JavaScript to
+the phone, and *that* makes the API calls. Which is why CORS exists at all, and
+why the middleware is already there: `:5173` to `:8000` is the same cross-origin
+problem in miniature.
+
+**Auth sits beside the request path, not inside it:**
+
+```
+  browser ──► auth provider ──► JWT (signed)
+  browser ──► the API, sending that JWT
+                  │
+                  └─ verifies the signature against the provider's
+                     PUBLIC keys, fetched once and cached
+```
+
+The API never calls the provider per request. So auth adds no latency, and a
+provider outage breaks new sign-ins while existing sessions carry on.
+
+### The container is disposable, and that has rules
+
+It can be killed and replaced at any moment — a deploy, host maintenance, a
+crash. Which forces four things, three of which are already true here by having
+followed sensible defaults:
+
+| Rule | Us |
+|---|---|
+| No state on local disk | ✅ everything is in Postgres |
+| Configuration from environment variables | ✅ `DATABASE_URL`, `VITE_API_URL` |
+| Logs to stdout, not to files | ✅ uvicorn's default |
+| Starts with no manual steps | ⚠️ migrations are still run by hand |
+
+### Migrations have to survive a rolling deploy
+
+A deploy is not a restart:
+
+```
+git push ─► platform builds an image ─► runs migrations
+         ─► starts the NEW container ─► shifts traffic ─► kills the OLD one
+```
+
+Note the ordering. **For a few seconds both versions run against the same
+database.** A migration that drops a column the *old* code still reads breaks
+live requests for real people while the changeover happens.
+
+Every migration written so far is a single destructive step — dropping
+`handicap_snapshots`, dropping `rounds.is_nine_hole`. That was correct with no
+deployed instance and stops being correct the moment there is one.
+
+The production pattern is **expand / contract**, spread over two deploys:
+
+1. **Expand.** Add the new column. Old and new code both work.
+2. Ship the code that uses it.
+3. **Contract.** A *later* deploy removes the old column, once nothing reads it.
+
+Locally this never appears, because there is one process and it gets restarted.
+It is the clearest example of what architecture actually is: not the boxes, but
+the constraints the boxes impose on how you are allowed to change things.
+
 ### The order things actually bite
 
 **Deploying at all — "it runs without my laptop."** Something hosts it. Config
