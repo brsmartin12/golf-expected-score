@@ -239,6 +239,13 @@ later and nothing needs moving.
   and the screen says what to enter. Substituting a nearby number is worse than
   leaving the round out: at a tee whose nines are 116 and 105, using the 18-hole
   slope costs up to 0.87 strokes, several times what including the round gains.
+- **Once deployed, migrations must survive a rolling deploy.** A deploy starts
+  the new container before stopping the old one, so for a few seconds both
+  versions run against the same schema. Dropping a column the old code still
+  reads breaks live requests. Destructive changes then take two deploys:
+  *expand* (add), ship the code that uses it, *contract* (remove) later. Every
+  migration so far is a single destructive step, which was correct with nothing
+  deployed and stops being correct the day something is. See `ROADMAP.md`.
 - **Schema changes go through Alembic, never `create_all`.** `create_all` only
   ever creates, so it silently does nothing to a table that already exists.
   After changing a model, run `alembic revision --autogenerate -m "..."`, read
